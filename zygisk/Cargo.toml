@@ -3,7 +3,7 @@ name = "vpnhide_zygisk"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
-license = "0BSD"
+license = "MIT"
 description = "Zygisk module (native libc hooks) that hides an active VPN from selected Android apps."
 repository = "https://github.com/okhsunrog/vpnhide-zygisk"
 

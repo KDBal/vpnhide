@@ -136,4 +136,6 @@ To skip a VPN interface during a netlink dump without corrupting the message str
 
 ## License
 
-GPL-2.0 (required for kernel modules using GPL-only symbols like `register_kretprobe`).
+MIT. See [LICENSE](../LICENSE).
+
+The compiled module declares `MODULE_LICENSE("GPL")` as required by the Linux kernel to resolve `EXPORT_SYMBOL_GPL` symbols (`register_kretprobe`, `proc_create`, etc.) at runtime.

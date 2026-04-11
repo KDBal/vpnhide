@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: MIT
 /*
  * vpnhide_kmod — kernel module that hides VPN network interfaces from
  * selected Android apps by filtering ioctl, netlink, and procfs

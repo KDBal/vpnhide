@@ -100,6 +100,6 @@ It is NOT designed for:
 
 ## License
 
-- **zygisk**: 0BSD
-- **lsposed**: unlicensed (do whatever you want)
-- **kmod**: GPL-2.0 (required for kernel modules)
+MIT. See [LICENSE](LICENSE).
+
+The kernel module declares `MODULE_LICENSE("GPL")` as required by the Linux kernel to resolve `EXPORT_SYMBOL_GPL` symbols at runtime.
