@@ -631,9 +631,9 @@ static int __init vpnhide_init(void)
 		}
 	}
 
-	/* 0644: root writes, everyone reads (system_server needs read
-	 * access to load target UIDs for Java-level VPN filtering). */
-	targets_entry = proc_create("vpnhide_targets", 0644, NULL,
+	/* 0600: root-only read/write. UIDs are written here by service.sh
+	 * and WebUI (both root). Apps must not see the target list. */
+	targets_entry = proc_create("vpnhide_targets", 0600, NULL,
 				    &targets_proc_ops);
 
 	pr_info(MODNAME ": loaded — write UIDs to /proc/vpnhide_targets\n");
