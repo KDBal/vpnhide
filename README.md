@@ -43,9 +43,9 @@ Install `vpnhide-test.apk` from the release, add it to the target list via WebUI
 
 | Directory | What | How |
 |---|---|---|
-| **[kmod/](kmod/)** | Kernel module (C) | `kretprobe` hooks in kernel space. Zero footprint in the target app's process. |
-| **[lsposed/](lsposed/)** | LSPosed module (Kotlin) | Hooks `writeToParcel` in `system_server` for per-UID Binder filtering. No in-process hooks. |
-| **[zygisk/](zygisk/)** | Zygisk module (Rust) | Inline-hooks `libc.so` in the target app's process. Alternative to kmod. |
+| **[kmod/](kmod/)** | Kernel module (C) | `kretprobe` hooks in kernel space. Zero footprint in the target app's process. ([details](kmod/README.md)) |
+| **[lsposed/](lsposed/)** | LSPosed module (Kotlin) | Hooks `writeToParcel` in `system_server` for per-UID Binder filtering. No in-process hooks. ([details](lsposed/README.md)) |
+| **[zygisk/](zygisk/)** | Zygisk module (Rust) | Inline-hooks `libc.so` in the target app's process. Alternative to kmod. ([details](zygisk/README.md)) |
 | **[test-app/](test-app/)** | Diagnostic app (Kotlin + Rust) | 22 checks covering all detection vectors. |
 
 ## Detection coverage
