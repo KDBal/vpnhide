@@ -2,16 +2,51 @@
 
 Hide an active Android VPN connection from selected apps.
 
-Three components work together to cover all detection vectors -- from Java APIs down to kernel syscalls. A diagnostic test app verifies everything works.
+## Which modules do I need?
+
+| Scenario | Modules | Why |
+|---|---|---|
+| **Banking / government apps** with anti-tamper SDKs | `kmod` + `lsposed` | Zero in-process footprint — undetectable by integrity checks |
+| **Everything else** | `zygisk` + `lsposed` | Simpler to install, no kernel module needed |
+
+Both setups cover all reachable VPN detection vectors. The `lsposed` module is always required — it handles Java API detection (the only path not covered by native hooks).
+
+## Install
+
+Download the latest release from [Releases](https://github.com/okhsunrog/vpnhide/releases).
+
+### kmod + lsposed (recommended)
+
+1. Install `vpnhide-kmod-<your-gki>.zip` via KernelSU-Next manager → Modules → Install from storage
+2. Install `vpnhide-lsposed.apk` as a regular app
+3. In LSPosed manager, enable the vpnhide module and add **"System Framework"** to its scope
+4. Reboot
+
+To find your GKI generation: `adb shell uname -r` — the `androidXX-Y.Z` part is the generation (e.g. `6.1.75-android14-11-g...` → `android14-6.1`).
+
+### zygisk + lsposed
+
+1. Install `vpnhide-zygisk.zip` via KernelSU-Next or Magisk manager → Modules
+2. Install `vpnhide-lsposed.apk` as a regular app
+3. In LSPosed manager, enable the vpnhide module and add **"System Framework"** to its scope
+4. Reboot
+
+## Configuration
+
+Open the module's WebUI in KernelSU-Next or Magisk manager (tap the module → settings/WebUI). Select which apps should not see the VPN, then tap Save. Changes apply immediately — no reboot needed.
+
+## Verify
+
+Install `vpnhide-test.apk` from the release, add it to the target list via WebUI, and launch it with VPN active. All checks should show PASS.
 
 ## Components
 
 | Directory | What | How |
-|-----------|------|-----|
-| **[kmod/](kmod/)** | Kernel module (C) | `kretprobe` hooks in kernel space. Zero footprint in the target app's process -- invisible to any userspace anti-tamper SDK. |
-| **[lsposed/](lsposed/)** | LSPosed module (Kotlin) | Hooks `writeToParcel` in `system_server` for per-UID Binder filtering. Only "System Framework" in LSPosed scope -- no in-process hooks. |
-| **[zygisk/](zygisk/)** | Zygisk module (Rust) | Inline-hooks `libc.so` in the target app's process. Alternative to kmod for users who can't install a kernel module. |
-| **[test-app/](test-app/)** | Diagnostic app (Kotlin + C++) | 22 checks covering all detection vectors. Logs to logcat under tag `VPNHideTest`. |
+|---|---|---|
+| **[kmod/](kmod/)** | Kernel module (C) | `kretprobe` hooks in kernel space. Zero footprint in the target app's process. |
+| **[lsposed/](lsposed/)** | LSPosed module (Kotlin) | Hooks `writeToParcel` in `system_server` for per-UID Binder filtering. No in-process hooks. |
+| **[zygisk/](zygisk/)** | Zygisk module (Rust) | Inline-hooks `libc.so` in the target app's process. Alternative to kmod. |
+| **[test-app/](test-app/)** | Diagnostic app (Kotlin + Rust) | 22 checks covering all detection vectors. |
 
 ## Detection coverage
 
@@ -42,61 +77,42 @@ Three components work together to cover all detection vectors -- from Java APIs 
 
 **blocked** = SELinux denies access for untrusted apps (Android 10+). No hook needed.
 
-**x** = actively filtered by this component.
-
 Rows 1-4 and 20 are the only vectors reachable by regular apps. Everything else is either blocked by SELinux or goes through Java APIs (covered by lsposed).
 
-## Which modules do I need?
+## Building from source
 
-- **Apps with aggressive anti-tamper SDKs** (banking, government): `kmod` + `lsposed`. Zero in-process footprint -- undetectable by integrity checks.
-- **Other apps**: `zygisk` + `lsposed`. Simpler to install (no kernel module), covers all reachable vectors.
-- **To verify your setup**: install `test-app`, add it to target lists, run with VPN active -- all checks should pass.
-
-## Configuration
-
-Both kmod and zygisk modules have a WebUI (KernelSU/Magisk manager -> module settings) to select target apps. On save, the WebUI writes to:
-- `targets.txt` -- persistent package names (survives module updates)
-- `/proc/vpnhide_targets` -- resolved UIDs for the kernel module (kmod only)
-- `/data/system/vpnhide_uids.txt` -- resolved UIDs for the lsposed system_server hooks
-
-All changes apply immediately -- no reboot needed.
-
-## Building
-
-- **kmod**: `cd kmod && make && ./build-zip.sh` (kernel source + clang, see [kmod/BUILDING.md](kmod/BUILDING.md))
+- **kmod**: `cd kmod && make && ./build-zip.sh` — see [kmod/BUILDING.md](kmod/BUILDING.md)
 - **zygisk**: `cd zygisk && ./build-zip.sh` (Rust + NDK + cargo-ndk)
 - **lsposed**: `cd lsposed && ./gradlew assembleDebug` (JDK 17)
-- **test-app**: `cd test-app && ./gradlew installDebug` (JDK 17 + NDK)
+- **test-app**: `cd test-app && ./gradlew installDebug` (JDK 17 + Rust + NDK)
 
 ## Verified against
 
-- [RKNHardering](https://github.com/xtclovver/RKNHardering/) -- all detection vectors clean
-- [YourVPNDead](https://github.com/loop-uh/yourvpndead) -- all detection vectors clean
+- [RKNHardering](https://github.com/xtclovver/RKNHardering/) — all detection vectors clean
+- [YourVPNDead](https://github.com/loop-uh/yourvpndead) — all detection vectors clean
 
 Both implement the official Russian Ministry of Digital Development VPN/proxy detection methodology ([source](https://t.me/ruitunion/893)).
 
 ## Split tunneling
 
-Works correctly with split-tunnel VPN configurations. Only the apps in the target list are affected -- all other apps see normal VPN state.
+Works correctly with split-tunnel VPN configurations. Only the apps in the target list are affected.
 
-Note: detection apps that compare device-reported public IP against external checkers require split tunneling -- the detection app's HTTPS requests must exit through the carrier, not the tunnel.
+Detection apps that compare device-reported public IP against external checkers require split tunneling — the detection app's traffic must exit through the carrier, not the tunnel.
 
 ## Threat model
 
-vpnhide is designed for one scenario: "I have a VPN running and certain apps refuse to work because they detect it. I want those specific apps to think the VPN isn't there."
-
-It is NOT designed for:
+vpnhide hides an active VPN from specific apps. It is NOT designed for:
 - Hiding root or custom ROM presence
 - Bypassing Play Integrity
-- Fooling server-side detection (DNS leakage, IP blocklists, latency fingerprinting, TLS fingerprinting)
+- Fooling server-side detection (DNS leakage, IP blocklists, latency/TLS fingerprinting)
 
 ## Known limitations
 
-- `kmod` requires a GKI kernel with `CONFIG_KPROBES=y` (standard on Pixel 6-9a with `android14-6.1`)
-- `lsposed` requires LSPosed or a compatible Xposed framework
+- `kmod` requires a GKI kernel with `CONFIG_KPROBES=y` (standard on Android 12+ devices)
+- `lsposed` requires LSPosed, LSPosed-Next, or Vector
 - `zygisk` is arm64 only
-- Direct `svc #0` syscalls bypass zygisk's libc hooks (that's what kmod is for)
-- Server-side detection is unfixable client-side -- use split tunneling
+- Direct `svc #0` syscalls bypass zygisk's libc hooks — that's what kmod is for
+- Server-side detection is unfixable client-side — use split tunneling
 
 ## License
 
