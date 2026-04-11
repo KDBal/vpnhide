@@ -8,9 +8,12 @@ Zero footprint in the target app's process -- no modified function prologues, no
 
 | kretprobe target | What it filters | Detection path covered |
 |---|---|---|
-| `dev_ioctl` | `SIOCGIFFLAGS`, `SIOCGIFNAME`: returns `-ENODEV` for VPN interfaces. `SIOCGIFCONF`: compacts VPN entries out of the returned array. | Direct `ioctl()` calls from native code (Flutter/Dart, JNI, C/C++) |
-| `rtnl_fill_ifinfo` | Returns `-EMSGSIZE` for VPN devices during RTM_GETLINK netlink dumps, causing the kernel to skip them | `getifaddrs()` (which uses netlink internally), any netlink-based interface enumeration |
-| `fib_route_seq_show` | Rewinds `seq->count` to hide lines with VPN interface names | `/proc/net/route` reads |
+| `dev_ioctl` | `SIOCGIFFLAGS`, `SIOCGIFNAME`: returns `-ENODEV` for VPN interfaces | Direct `ioctl()` calls from native code (Flutter/Dart, JNI, C/C++) |
+| `dev_ifconf` | `SIOCGIFCONF`: compacts VPN entries out of the returned interface array | Interface enumeration via `ioctl(SIOCGIFCONF)` |
+| `rtnl_fill_ifinfo` | Returns `-EMSGSIZE` for VPN devices during RTM_NEWLINK netlink dumps, causing the kernel to skip them | `getifaddrs()` (which uses netlink internally), any netlink-based interface enumeration |
+| `inet6_fill_ifaddr` | Trims VPN entries from RTM_GETADDR IPv6 responses via `skb_trim` | IPv6 address enumeration over netlink |
+| `inet_fill_ifaddr` | Trims VPN entries from RTM_GETADDR IPv4 responses via `skb_trim` | IPv4 address enumeration over netlink |
+| `fib_route_seq_show` | Forward-scans for VPN lines and compacts them out with `memmove` | `/proc/net/route` reads |
 
 All filtering is **per-UID**: only processes whose UID appears in `/proc/vpnhide_targets` see the filtered view. Everyone else (system services, VPN client, NFC subsystem) sees the real data.
 
@@ -22,39 +25,19 @@ Kernel kretprobes modify kernel function behavior, not userspace code. The targe
 
 ## GKI compatibility
 
-The module is built against the Android Common Kernel (ACK) source for `android14-6.1`. All symbols it uses (`register_kretprobe`, `proc_create`, `seq_read`, etc.) are part of the stable GKI KMI, so the same `Module.symvers` CRCs work across all devices running the same GKI generation.
+All symbols used (`register_kretprobe`, `proc_create`, `seq_read`, etc.) are part of the stable GKI KMI, so the same `Module.symvers` CRCs work across all devices running the same GKI generation. The C source is identical across generations -- only the kernel headers and CRCs differ.
 
 KernelSU bypasses the kernel's vermagic check, so no runtime patching is needed. `post-fs-data.sh` simply runs `insmod` directly.
 
-### Current build target
-
-- **`android14-6.1`** -- Pixel 8/9 series, Samsung Galaxy S24/S25, OnePlus 12/13, Xiaomi 14/15, and most 2024 flagships on Android 14/15.
-
-### TODO: multi-generation support
-
-The C source is the same across GKI generations -- only the `Module.symvers` CRCs and kernel headers differ. To support other generations, build against the corresponding ACK branch:
-
-| GKI generation | ACK branch | Devices |
-|---|---|---|
-| `android13-5.15` | `android13-5.15` | Pixel 7, some 2023 devices |
-| `android14-5.15` | `android14-5.15` | Some Samsung on Android 14 |
-| `android14-6.1` | `android14-6.1` | **Current build** |
-| `android15-6.1` | `android15-6.1` | Pixel 8/9 on Android 15 QPR |
-| `android15-6.6` | `android15-6.6` | Future devices |
-
-Each generation needs a separate `.ko`. The build steps are identical -- only the kernel source checkout and `Module.symvers` change. A future CI matrix build could produce all variants from one commit.
+CI builds are provided for all 7 GKI generations: `android12-5.10` through `android16-6.12`.
 
 ## Build
 
-See [BUILDING.md](BUILDING.md) for the full guide (kernel source preparation, toolchain setup, `Module.symvers` generation).
-
-Quick version:
+See [BUILDING.md](BUILDING.md) for the full guide (DDK Docker build, kernel source preparation, toolchain setup, `Module.symvers` generation).
 
 ```bash
 cd kmod && ./build-zip.sh
 ```
-
-Requires kernel source for `android14-6.1` + clang cross-compiler.
 
 ## Install
 
@@ -88,19 +71,16 @@ adb shell su -c 'echo 10423 > /proc/vpnhide_targets'
 
 For apps with aggressive anti-tamper SDKs, full VPN hiding requires covering both native and Java API detection paths -- without placing any hooks in the target app's process:
 
-- **vpnhide-kmod** (this module) covers the native side: `ioctl` (`SIOCGIFFLAGS` / `SIOCGIFNAME` / `SIOCGIFCONF`), `getifaddrs()` (via `rtnl_fill_ifinfo`), and `/proc/net/route` (via `fib_route_seq_show`).
-- **[lsposed](../lsposed/) system_server hooks** cover the Java API side: `NetworkCapabilities.writeToParcel()`, `NetworkInfo.writeToParcel()`, `LinkProperties.writeToParcel()` -- stripping VPN data before Binder serialization reaches the app.
+- **vpnhide-kmod** (this module) covers the native side: `ioctl`, `getifaddrs()` (netlink), `/proc/net/route`, and netlink address enumeration.
+- **[lsposed](../lsposed/)** hooks `writeToParcel()` on `NetworkCapabilities`, `NetworkInfo`, `LinkProperties` inside `system_server` -- stripping VPN data before Binder serialization reaches the app.
 
-Together they provide complete VPN hiding without any hooks in the target app's process. The anti-tamper SDK cannot detect either component.
+Together they provide complete VPN hiding without any hooks in the target app's process.
 
 ### Setup
 
 1. Install **vpnhide-kmod** as a KSU module (this module).
-2. Install **[lsposed](../lsposed/)** as an LSPosed/Vector module and add **"System Framework"** to its scope.
+2. Install **[lsposed](../lsposed/)** as an LSPosed/Vector module and add **"System Framework"** to its scope (no other apps in scope).
 3. Pick target apps in vpnhide-kmod's WebUI -- it manages targets for both the kernel module and the system_server hooks.
-4. **Remove** banking apps from lsposed's LSPosed app-process scope (if they were added previously). Only "System Framework" should be in scope for anti-tamper SDK apps -- loading the module into the target app's process will trigger the SDK's anti-tamper detection.
-
-For apps without aggressive anti-tamper SDKs, the standard combination of [lsposed](../lsposed/) (app-process hooks) + [zygisk](../zygisk/) provides more complete Java + native coverage and does not require this kernel module.
 
 ## Architecture notes
 
@@ -127,12 +107,6 @@ int dev_ioctl(struct net *net,       // x0
 ### rtnl_fill_ifinfo trick
 
 To skip a VPN interface during a netlink dump without corrupting the message stream, the return handler sets the return value to `-EMSGSIZE`. The dump iterator interprets this as "skb too small for this entry" and moves to the next device without adding the current one -- effectively skipping it. The entry is never seen by userspace.
-
-## TODO
-
-- [ ] Multi-GKI-generation CI build (see GKI compatibility section)
-- [ ] `/proc/net/tcp`, `tcp6` filtering (`tcp4_seq_show` / `tcp6_seq_show`) -- low priority, only matters for proxy-based VPN clients with open local ports
-- [ ] `connect()` filter on localhost proxy ports (`__sys_connect`) -- same caveat as above
 
 ## License
 

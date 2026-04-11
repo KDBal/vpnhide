@@ -135,4 +135,4 @@ VPN interface prefixes: `tun`, `ppp`, `tap`, `wg`, `ipsec`, `xfrm`, `utun`, `l2t
 
 ## License
 
-0BSD -- do whatever you want with it, no warranty.
+MIT. See [LICENSE](../LICENSE).
