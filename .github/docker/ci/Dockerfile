@@ -17,7 +17,7 @@ RUN apt-get update && \
         build-essential pkg-config \
         cmake ninja-build \
         openjdk-17-jdk-headless \
-        bc kmod cpio \
+        bc kmod cpio flex bison libssl-dev libelf-dev \
         binutils-aarch64-linux-gnu \
         git && \
     rm -rf /var/lib/apt/lists/*
