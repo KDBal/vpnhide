@@ -18,7 +18,8 @@ Download the latest release from [Releases](https://github.com/okhsunrog/vpnhide
 1. Install `vpnhide-kmod-<your-gki>.zip` via KernelSU-Next manager → Modules → Install from storage
 2. Install `vpnhide-lsposed.apk` as a regular app
 3. In LSPosed manager, enable the vpnhide module and add **"System Framework"** to its scope
-4. Reboot
+4. Reboot (required — LSPosed hooks are injected into `system_server` at boot, so the module must be active before `system_server` starts)
+5. Open the VPN Hide app, grant root access when prompted, and select target apps
 
 **Finding your GKI generation:** run `adb shell uname -r`. The output looks like `6.1.75-android14-11-g...` — the generation is `android14-6.1`. Download the matching `vpnhide-kmod-android14-6.1.zip`.
 
@@ -29,11 +30,12 @@ Download the latest release from [Releases](https://github.com/okhsunrog/vpnhide
 1. Install `vpnhide-zygisk.zip` via KernelSU-Next or Magisk manager → Modules
 2. Install `vpnhide-lsposed.apk` as a regular app
 3. In LSPosed manager, enable the vpnhide module and add **"System Framework"** to its scope
-4. Reboot
+4. Reboot (required — LSPosed hooks are injected into `system_server` at boot)
+5. Open the VPN Hide app, grant root access when prompted, and select target apps
 
 ## Configuration
 
-**VPN Hide app (recommended):** open the VPN Hide app (installed as `vpnhide-lsposed.apk`). It shows all installed apps with icons, names, and search. Check the apps you want to hide VPN from, tap Save. Works with both kmod and zygisk — writes to all target locations automatically. Requires root.
+**VPN Hide app (recommended):** open the VPN Hide app (installed as `vpnhide-lsposed.apk`) and grant root access when prompted. It shows all installed apps with icons, names, and search. Check the apps you want to hide VPN from, tap Save. Works with both kmod and zygisk — writes to all target locations automatically via `su`.
 
 **WebUI:** on KernelSU-Next, open the module in the manager and tap WebUI. Same functionality, but only available on KernelSU-Next (Magisk doesn't support WebUI).
 
