@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">VPN Hide</string>
+    <string name="module_description">Скрывает активное VPN-соединение от выбранных приложений — NetworkCapabilities, NetworkInfo, NetworkInterface, LinkProperties, /proc/net</string>
+
+    <!-- Toolbar -->
+    <string name="toolbar_title">VPN Hide</string>
+
+    <!-- Bottom bar -->
+    <string name="selected_count">%d выбрано</string>
+    <string name="btn_save">Сохранить</string>
+
+    <!-- Search / filter -->
+    <string name="search_placeholder">Поиск приложений&#8230;</string>
+    <string name="filter_system">Системные</string>
+
+    <!-- Save feedback -->
+    <string name="save_success">Сохранено целей: %d</string>
+    <string name="save_failed_exit">Ошибка сохранения (код выхода %d)</string>
+    <string name="save_failed_error">Ошибка сохранения: %s</string>
+</resources>

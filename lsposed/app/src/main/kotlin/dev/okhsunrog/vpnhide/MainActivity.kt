@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -27,8 +28,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.BufferedReader
-import java.io.InputStreamReader
 
 private const val TAG = "VpnHide"
 
@@ -167,7 +166,7 @@ fun VpnHideApp() {
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
-                    title = { Text("VPN Hide") },
+                    title = { Text(stringResource(R.string.toolbar_title)) },
                     colors =
                         TopAppBarDefaults.topAppBarColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -186,7 +185,7 @@ fun VpnHideApp() {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "$selectedCount selected",
+                            text = stringResource(R.string.selected_count, selectedCount),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f),
@@ -198,7 +197,7 @@ fun VpnHideApp() {
                             },
                             enabled = dirty && !saving,
                         ) {
-                            Text("Save")
+                            Text(stringResource(R.string.btn_save))
                         }
                     }
                 }
@@ -221,7 +220,7 @@ fun VpnHideApp() {
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        placeholder = { Text("Search apps...") },
+                        placeholder = { Text(stringResource(R.string.search_placeholder)) },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
@@ -229,7 +228,7 @@ fun VpnHideApp() {
                     FilterChip(
                         selected = showSystem,
                         onClick = { showSystem = !showSystem },
-                        label = { Text("System") },
+                        label = { Text(stringResource(R.string.filter_system)) },
                     )
                 }
 
@@ -263,21 +262,22 @@ fun VpnHideApp() {
         if (saving) {
             LaunchedEffect(Unit) {
                 val selected = allApps.filter { it.selected }.map { it.packageName }.sorted()
+                val header = context.getString(R.string.save_header_comment)
                 val body =
-                    "# Managed by VPN Hide app\n" +
+                    "$header\n" +
                         selected.joinToString("\n") +
                         if (selected.isNotEmpty()) "\n" else ""
 
                 try {
                     val (exitCode, _) = suExecAsync(buildSaveCommand(body, selected))
                     if (exitCode == 0) {
-                        snackMessage = "Saved ${selected.size} target(s)"
+                        snackMessage = context.getString(R.string.save_success, selected.size)
                     } else {
-                        snackMessage = "Save failed (exit code $exitCode)"
+                        snackMessage = context.getString(R.string.save_failed_exit, exitCode)
                         dirty = true
                     }
                 } catch (e: Exception) {
-                    snackMessage = "Save failed: ${e.message}"
+                    snackMessage = context.getString(R.string.save_failed_error, e.message ?: "")
                     dirty = true
                 }
                 saving = false

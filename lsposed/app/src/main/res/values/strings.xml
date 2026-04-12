@@ -1,4 +1,21 @@
 <resources>
     <string name="app_name">VPN Hide</string>
     <string name="module_description">Hides active VPN connection from selected apps — NetworkCapabilities, NetworkInfo, NetworkInterface, LinkProperties, /proc/net</string>
+
+    <!-- Toolbar -->
+    <string name="toolbar_title">VPN Hide</string>
+
+    <!-- Bottom bar -->
+    <string name="selected_count">%d selected</string>
+    <string name="btn_save">Save</string>
+
+    <!-- Search / filter -->
+    <string name="search_placeholder">Search apps&#8230;</string>
+    <string name="filter_system">System</string>
+
+    <!-- Save feedback -->
+    <string name="save_success">Saved %d target(s)</string>
+    <string name="save_failed_exit">Save failed (exit code %d)</string>
+    <string name="save_failed_error">Save failed: %s</string>
+    <string name="save_header_comment"># Managed by VPN Hide app</string>
 </resources>
