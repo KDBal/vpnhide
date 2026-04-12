@@ -7,6 +7,8 @@ object NativeChecks {
 
     external fun checkIoctlSiocgifflags(): String
 
+    external fun checkIoctlSiocgifmtu(): String
+
     external fun checkIoctlSiocgifconf(): String
 
     external fun checkGetifaddrs(): String

@@ -279,6 +279,7 @@ private fun runAllChecks(
     val native =
         listOf(
             nativeCheck(res.getString(R.string.check_ioctl_flags)) { NativeChecks.checkIoctlSiocgifflags() },
+            nativeCheck(res.getString(R.string.check_ioctl_mtu)) { NativeChecks.checkIoctlSiocgifmtu() },
             nativeCheck(res.getString(R.string.check_ioctl_conf)) { NativeChecks.checkIoctlSiocgifconf() },
             nativeCheck(res.getString(R.string.check_getifaddrs)) { NativeChecks.checkGetifaddrs() },
             nativeCheck(res.getString(R.string.check_netlink_getlink)) { NativeChecks.checkNetlinkGetlink() },
@@ -305,6 +306,7 @@ private fun runAllChecks(
             checkAllNetworksVpn(cm, res.getString(R.string.check_all_networks_vpn)),
             checkActiveNetworkVpn(cm, res.getString(R.string.check_active_network_vpn)),
             checkLinkPropertiesIfname(cm, res.getString(R.string.check_link_properties)),
+            checkLinkPropertiesRoutes(cm, res.getString(R.string.check_link_properties_routes)),
             checkProxyHost(res.getString(R.string.check_proxy_host)),
         )
 
@@ -502,6 +504,34 @@ private fun checkLinkPropertiesIfname(
         }
     Log.i(TAG, "[$name] $detail")
     return CheckResult(name, !isVpn, detail)
+}
+
+private fun checkLinkPropertiesRoutes(
+    cm: ConnectivityManager,
+    name: String,
+): CheckResult {
+    Log.i(TAG, "=== CHECK: $name ===")
+    val net =
+        cm.activeNetwork
+            ?: return CheckResult(name, true, "PASS: no active network").also { Log.i(TAG, "[$name] ${it.detail}") }
+    val lp =
+        cm.getLinkProperties(net)
+            ?: return CheckResult(name, true, "PASS: no link properties").also { Log.i(TAG, "[$name] ${it.detail}") }
+    val routes = lp.routes
+    val vpnRoutes =
+        routes.filter { route ->
+            val iface = route.`interface` ?: return@filter false
+            VPN_PREFIXES.any { iface.startsWith(it) }
+        }
+    val detail =
+        if (vpnRoutes.isEmpty()) {
+            "PASS: ${routes.size} routes, none via VPN interfaces"
+        } else {
+            val vpnDesc = vpnRoutes.joinToString("; ") { "${it.destination} dev ${it.`interface`}" }
+            "FAIL: ${vpnRoutes.size} route(s) via VPN: $vpnDesc"
+        }
+    Log.i(TAG, "[$name] $detail")
+    return CheckResult(name, vpnRoutes.isEmpty(), detail)
 }
 
 private fun checkProxyHost(name: String): CheckResult {

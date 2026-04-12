@@ -131,6 +131,35 @@ fn check_ioctl_siocgifflags() -> String {
     }
 }
 
+fn check_ioctl_siocgifmtu() -> String {
+    logi("=== CHECK: ioctl SIOCGIFMTU on tun0 ===");
+    unsafe {
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+        if fd < 0 {
+            return format!("FAIL: cannot create socket: {}", last_os_error());
+        }
+
+        let mut ifr: libc::ifreq = std::mem::zeroed();
+        let name = b"tun0\0";
+        ifr.ifr_name[..name.len()].copy_from_slice(&name.map(|b| b as libc::c_char));
+
+        let ret = libc::ioctl(fd, libc::SIOCGIFMTU as i32, &ifr);
+        let err = last_os_errno();
+        libc::close(fd);
+
+        if ret < 0 {
+            if err == libc::ENODEV || err == libc::ENXIO {
+                "PASS: ioctl(tun0, SIOCGIFMTU) returned ENODEV — interface not visible".into()
+            } else {
+                format!("FAIL: ioctl returned error {err} ({})", last_os_error())
+            }
+        } else {
+            let mtu = ifr.ifr_ifru.ifru_mtu;
+            format!("FAIL: tun0 is visible! MTU={mtu}")
+        }
+    }
+}
+
 fn check_ioctl_siocgifconf() -> String {
     logi("=== CHECK: ioctl SIOCGIFCONF enumeration ===");
     unsafe {
@@ -523,6 +552,10 @@ macro_rules! jni_fn {
 jni_fn!(
     Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkIoctlSiocgifflags,
     check_ioctl_siocgifflags()
+);
+jni_fn!(
+    Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkIoctlSiocgifmtu,
+    check_ioctl_siocgifmtu()
 );
 jni_fn!(
     Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkIoctlSiocgifconf,

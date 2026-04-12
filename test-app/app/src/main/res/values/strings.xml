@@ -22,6 +22,7 @@
 
     <!-- Native check names -->
     <string name="check_ioctl_flags">ioctl SIOCGIFFLAGS tun0</string>
+    <string name="check_ioctl_mtu">ioctl SIOCGIFMTU tun0</string>
     <string name="check_ioctl_conf">ioctl SIOCGIFCONF enum</string>
     <string name="check_getifaddrs">getifaddrs() enum</string>
     <string name="check_netlink_getlink">netlink RTM_GETLINK</string>
@@ -46,5 +47,6 @@
     <string name="check_all_networks_vpn">getAllNetworks() VPN scan</string>
     <string name="check_active_network_vpn">ActiveNetwork transports</string>
     <string name="check_link_properties">LinkProperties ifname</string>
+    <string name="check_link_properties_routes">LinkProperties routes</string>
     <string name="check_proxy_host">System proxy properties</string>
 </resources>
