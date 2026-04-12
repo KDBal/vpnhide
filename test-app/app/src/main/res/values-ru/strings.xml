@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">VPN Hide Тест</string>
+    <string name="toolbar_title">VPN Hide Диагностика</string>
+
+    <!-- Summary -->
+    <string name="summary_running">Выполняется&#8230;</string>
+    <string name="summary_format">%1$d/%2$d пройдено</string>
+    <string name="btn_run_all">Запустить все проверки</string>
+
+    <!-- Badge labels -->
+    <string name="badge_pass">ОК</string>
+    <string name="badge_fail">ПРОВАЛ</string>
+    <string name="badge_info">ИНФО</string>
+
+    <!-- Target list banner -->
+    <string name="banner_target_warning">Убедитесь, что это приложение добавлено в список целевых приложений в VPN Hide перед запуском проверок.</string>
+
+    <!-- Section headers -->
+    <string name="section_native_kmod_zygisk">Нативные хуки (kmod / zygisk)</string>
+    <string name="section_selinux">Векторы, блокируемые SELinux</string>
+    <string name="section_java_lsposed">Java API хуки (LSPosed)</string>
+</resources>

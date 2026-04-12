@@ -1,4 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">VPNHide Test</string>
+    <string name="app_name">VPN Hide Test</string>
+    <string name="toolbar_title">VPN Hide Diagnostics</string>
+
+    <!-- Summary -->
+    <string name="summary_running">Running&#8230;</string>
+    <string name="summary_format">%1$d/%2$d passed</string>
+    <string name="btn_run_all">Run All Checks</string>
+
+    <!-- Badge labels -->
+    <string name="badge_pass">PASS</string>
+    <string name="badge_fail">FAIL</string>
+    <string name="badge_info">INFO</string>
+
+    <!-- Target list banner -->
+    <string name="banner_target_warning">Make sure this app is in the target list in the VPN Hide app before running checks.</string>
+
+    <!-- Section headers -->
+    <string name="section_native_kmod_zygisk">Native hooks (kmod / zygisk)</string>
+    <string name="section_selinux">SELinux-blocked vectors</string>
+    <string name="section_java_lsposed">Java API hooks (LSPosed)</string>
+
+    <!-- Native check names (kmod/zygisk) -->
+    <string name="check_ioctl_flags">ioctl SIOCGIFFLAGS tun0</string>
+    <string name="check_ioctl_conf">ioctl SIOCGIFCONF enum</string>
+    <string name="check_getifaddrs">getifaddrs() enum</string>
+    <string name="check_netlink_getlink">netlink RTM_GETLINK</string>
+    <string name="check_netlink_getroute">netlink RTM_GETROUTE</string>
+    <string name="check_proc_route">/proc/net/route</string>
+    <string name="check_proc_ipv6_route">/proc/net/ipv6_route</string>
+    <string name="check_proc_if_inet6">/proc/net/if_inet6</string>
+    <string name="check_net_iface_enum">NetworkInterface enum</string>
+    <string name="check_proc_route_java">/proc/net/route (Java)</string>
+
+    <!-- SELinux-blocked check names -->
+    <string name="check_proc_tcp">/proc/net/tcp</string>
+    <string name="check_proc_tcp6">/proc/net/tcp6</string>
+    <string name="check_proc_udp">/proc/net/udp</string>
+    <string name="check_proc_udp6">/proc/net/udp6</string>
+    <string name="check_proc_dev">/proc/net/dev</string>
+    <string name="check_proc_fib_trie">/proc/net/fib_trie</string>
+    <string name="check_sys_class_net">/sys/class/net</string>
+
+    <!-- Java/LSPosed check names -->
+    <string name="check_has_transport_vpn">hasTransport(VPN)</string>
+    <string name="check_has_capability_not_vpn">hasCapability(NOT_VPN)</string>
+    <string name="check_transport_info">getTransportInfo()</string>
+    <string name="check_all_networks_vpn">getAllNetworks() VPN scan</string>
+    <string name="check_active_network_vpn">ActiveNetwork transports</string>
+    <string name="check_link_properties">LinkProperties ifname</string>
+    <string name="check_proxy_host">System proxy properties</string>
 </resources>

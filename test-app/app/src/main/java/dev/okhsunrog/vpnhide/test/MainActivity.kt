@@ -5,7 +5,6 @@ import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -19,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -62,20 +62,22 @@ fun VpnHideTestApp() {
         val context = LocalContext.current
         val cm = context.getSystemService(ConnectivityManager::class.java)
         var results by remember { mutableStateOf<List<CheckResult>>(emptyList()) }
-        var summary by remember { mutableStateOf("Running...") }
+        val summaryRunning = stringResource(R.string.summary_running)
+        var summary by remember { mutableStateOf(summaryRunning) }
+        val summaryFmt = stringResource(R.string.summary_format)
 
         LaunchedEffect(Unit) {
-            val r = runAllChecks(cm)
+            val r = runAllChecks(cm, context)
             results = r
             val scored = r.filter { it.passed != null }
             val passed = scored.count { it.passed == true }
-            summary = "$passed/${scored.size} passed"
+            summary = String.format(summaryFmt, passed, scored.size)
         }
 
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("VPNHide Diagnostics") },
+                    title = { Text(stringResource(R.string.toolbar_title)) },
                     colors =
                         TopAppBarDefaults.topAppBarColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -93,6 +95,25 @@ fun VpnHideTestApp() {
             ) {
                 Spacer(Modifier.height(8.dp))
 
+                // Banner: target list warning
+                Card(
+                    shape = RoundedCornerShape(8.dp),
+                    colors =
+                        CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        ),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = stringResource(R.string.banner_target_warning),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+
                 Text(
                     text = summary,
                     style = MaterialTheme.typography.titleMedium,
@@ -102,16 +123,16 @@ fun VpnHideTestApp() {
 
                 Button(
                     onClick = {
-                        summary = "Running..."
-                        val r = runAllChecks(cm)
+                        summary = summaryRunning
+                        val r = runAllChecks(cm, context)
                         results = r
                         val scored = r.filter { it.passed != null }
                         val passed = scored.count { it.passed == true }
-                        summary = "$passed/${scored.size} passed"
+                        summary = String.format(summaryFmt, passed, scored.size)
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Run All Checks")
+                    Text(stringResource(R.string.btn_run_all))
                 }
 
                 Spacer(Modifier.height(8.dp))
@@ -135,12 +156,6 @@ fun VpnHideTestApp() {
 
 @Composable
 fun CheckCard(r: CheckResult) {
-    val containerColor =
-        when (r.passed) {
-            true -> Color(0xFFE8F5E9)
-            false -> Color(0xFFFFEBEE)
-            null -> MaterialTheme.colorScheme.surfaceVariant
-        }
     val darkTheme = isSystemInDarkTheme()
     val actualColor =
         if (darkTheme) {
@@ -150,8 +165,21 @@ fun CheckCard(r: CheckResult) {
                 null -> MaterialTheme.colorScheme.surfaceVariant
             }
         } else {
-            containerColor
+            when (r.passed) {
+                true -> Color(0xFFE8F5E9)
+                false -> Color(0xFFFFEBEE)
+                null -> MaterialTheme.colorScheme.surfaceVariant
+            }
         }
+
+    val badgeText =
+        stringResource(
+            when (r.passed) {
+                true -> R.string.badge_pass
+                false -> R.string.badge_fail
+                null -> R.string.badge_info
+            },
+        )
 
     val badgeColor =
         when (r.passed) {
@@ -178,12 +206,7 @@ fun CheckCard(r: CheckResult) {
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    text =
-                        when (r.passed) {
-                            true -> "PASS"
-                            false -> "FAIL"
-                            null -> "INFO"
-                        },
+                    text = badgeText,
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,
                     color = badgeColor,
@@ -200,40 +223,46 @@ fun CheckCard(r: CheckResult) {
     }
 }
 
-private fun runAllChecks(cm: ConnectivityManager): List<CheckResult> {
+private fun runAllChecks(
+    cm: ConnectivityManager,
+    context: android.content.Context,
+): List<CheckResult> {
     Log.i(TAG, "========================================")
     Log.i(TAG, "=== VPNHide Test — starting all checks ===")
     Log.i(TAG, "========================================")
 
     val results = mutableListOf<CheckResult>()
+    val res = context.resources
 
-    // Native checks — kernel-level detection vectors
-    results.add(nativeCheck("ioctl SIOCGIFFLAGS tun0") { NativeChecks.checkIoctlSiocgifflags() })
-    results.add(nativeCheck("ioctl SIOCGIFCONF enum") { NativeChecks.checkIoctlSiocgifconf() })
-    results.add(nativeCheck("getifaddrs() enum") { NativeChecks.checkGetifaddrs() })
-    results.add(nativeCheck("netlink RTM_GETLINK") { NativeChecks.checkNetlinkGetlink() })
-    results.add(nativeCheck("netlink RTM_GETROUTE") { NativeChecks.checkNetlinkGetroute() })
-    results.add(nativeCheck("/proc/net/route") { NativeChecks.checkProcNetRoute() })
-    results.add(nativeCheck("/proc/net/ipv6_route") { NativeChecks.checkProcNetIpv6Route() })
-    results.add(nativeCheck("/proc/net/if_inet6") { NativeChecks.checkProcNetIfInet6() })
-    results.add(nativeCheck("/proc/net/tcp") { NativeChecks.checkProcNetTcp() })
-    results.add(nativeCheck("/proc/net/tcp6") { NativeChecks.checkProcNetTcp6() })
-    results.add(nativeCheck("/proc/net/udp") { NativeChecks.checkProcNetUdp() })
-    results.add(nativeCheck("/proc/net/udp6") { NativeChecks.checkProcNetUdp6() })
-    results.add(nativeCheck("/proc/net/dev") { NativeChecks.checkProcNetDev() })
-    results.add(nativeCheck("/proc/net/fib_trie") { NativeChecks.checkProcNetFibTrie() })
-    results.add(nativeCheck("/sys/class/net") { NativeChecks.checkSysClassNet() })
+    // Native checks — kmod/zygisk detection vectors
+    results.add(nativeCheck(res.getString(R.string.check_ioctl_flags)) { NativeChecks.checkIoctlSiocgifflags() })
+    results.add(nativeCheck(res.getString(R.string.check_ioctl_conf)) { NativeChecks.checkIoctlSiocgifconf() })
+    results.add(nativeCheck(res.getString(R.string.check_getifaddrs)) { NativeChecks.checkGetifaddrs() })
+    results.add(nativeCheck(res.getString(R.string.check_netlink_getlink)) { NativeChecks.checkNetlinkGetlink() })
+    results.add(nativeCheck(res.getString(R.string.check_netlink_getroute)) { NativeChecks.checkNetlinkGetroute() })
+    results.add(nativeCheck(res.getString(R.string.check_proc_route)) { NativeChecks.checkProcNetRoute() })
+    results.add(nativeCheck(res.getString(R.string.check_proc_ipv6_route)) { NativeChecks.checkProcNetIpv6Route() })
+    results.add(nativeCheck(res.getString(R.string.check_proc_if_inet6)) { NativeChecks.checkProcNetIfInet6() })
 
-    // Java checks — Android API detection vectors
-    results.add(checkHasTransportVpn(cm))
-    results.add(checkHasCapabilityNotVpn(cm))
-    results.add(checkTransportInfo(cm))
-    results.add(checkNetworkInterfaceEnum())
-    results.add(checkAllNetworksVpn(cm))
-    results.add(checkActiveNetworkVpn(cm))
-    results.add(checkLinkPropertiesIfname(cm))
-    results.add(checkProxyHost())
-    results.add(checkProcNetRouteJava())
+    // SELinux-blocked vectors
+    results.add(nativeCheck(res.getString(R.string.check_proc_tcp)) { NativeChecks.checkProcNetTcp() })
+    results.add(nativeCheck(res.getString(R.string.check_proc_tcp6)) { NativeChecks.checkProcNetTcp6() })
+    results.add(nativeCheck(res.getString(R.string.check_proc_udp)) { NativeChecks.checkProcNetUdp() })
+    results.add(nativeCheck(res.getString(R.string.check_proc_udp6)) { NativeChecks.checkProcNetUdp6() })
+    results.add(nativeCheck(res.getString(R.string.check_proc_dev)) { NativeChecks.checkProcNetDev() })
+    results.add(nativeCheck(res.getString(R.string.check_proc_fib_trie)) { NativeChecks.checkProcNetFibTrie() })
+    results.add(nativeCheck(res.getString(R.string.check_sys_class_net)) { NativeChecks.checkSysClassNet() })
+
+    // Java checks — LSPosed/Binder detection vectors
+    results.add(checkHasTransportVpn(cm, res.getString(R.string.check_has_transport_vpn)))
+    results.add(checkHasCapabilityNotVpn(cm, res.getString(R.string.check_has_capability_not_vpn)))
+    results.add(checkTransportInfo(cm, res.getString(R.string.check_transport_info)))
+    results.add(checkNetworkInterfaceEnum(res.getString(R.string.check_net_iface_enum)))
+    results.add(checkAllNetworksVpn(cm, res.getString(R.string.check_all_networks_vpn)))
+    results.add(checkActiveNetworkVpn(cm, res.getString(R.string.check_active_network_vpn)))
+    results.add(checkLinkPropertiesIfname(cm, res.getString(R.string.check_link_properties)))
+    results.add(checkProxyHost(res.getString(R.string.check_proxy_host)))
+    results.add(checkProcNetRouteJava(res.getString(R.string.check_proc_route_java)))
 
     val scored = results.filter { it.passed != null }
     val passed = scored.count { it.passed == true }
@@ -259,8 +288,10 @@ private fun nativeCheck(
         CheckResult(name, false, detail)
     }
 
-private fun checkHasTransportVpn(cm: ConnectivityManager): CheckResult {
-    val name = "7. hasTransport(VPN)"
+private fun checkHasTransportVpn(
+    cm: ConnectivityManager,
+    name: String,
+): CheckResult {
     Log.i(TAG, "=== CHECK: $name ===")
     val net = cm.activeNetwork
     if (net == null) return CheckResult(name, true, "PASS: no active network").also { Log.i(TAG, "[$name] ${it.detail}") }
@@ -277,12 +308,13 @@ private fun checkHasTransportVpn(cm: ConnectivityManager): CheckResult {
             "FAIL: hasTransport(VPN)=true, WIFI=$hasWifi, CELLULAR=$hasCellular"
         }
     Log.i(TAG, "[$name] $detail")
-    Log.i(TAG, "[$name] caps.toString(): $caps")
     return CheckResult(name, !hasVpn, detail)
 }
 
-private fun checkHasCapabilityNotVpn(cm: ConnectivityManager): CheckResult {
-    val name = "8. hasCapability(NOT_VPN)"
+private fun checkHasCapabilityNotVpn(
+    cm: ConnectivityManager,
+    name: String,
+): CheckResult {
     Log.i(TAG, "=== CHECK: $name ===")
     val net =
         cm.activeNetwork
@@ -296,8 +328,10 @@ private fun checkHasCapabilityNotVpn(cm: ConnectivityManager): CheckResult {
     return CheckResult(name, notVpn, detail)
 }
 
-private fun checkTransportInfo(cm: ConnectivityManager): CheckResult {
-    val name = "9. getTransportInfo()"
+private fun checkTransportInfo(
+    cm: ConnectivityManager,
+    name: String,
+): CheckResult {
     Log.i(TAG, "=== CHECK: $name ===")
     val net =
         cm.activeNetwork
@@ -307,15 +341,13 @@ private fun checkTransportInfo(cm: ConnectivityManager): CheckResult {
             ?: return CheckResult(name, true, "PASS: no capabilities").also { Log.i(TAG, "[$name] ${it.detail}") }
     val info = caps.transportInfo
     val className = info?.javaClass?.name ?: "null"
-    Log.i(TAG, "[$name] transportInfo class=$className, value=$info")
     val isVpn = className.contains("VpnTransportInfo")
     val detail = if (!isVpn) "PASS: transportInfo=$className" else "FAIL: VpnTransportInfo: $info"
     Log.i(TAG, "[$name] $detail")
     return CheckResult(name, !isVpn, detail)
 }
 
-private fun checkNetworkInterfaceEnum(): CheckResult {
-    val name = "10. NetworkInterface enum"
+private fun checkNetworkInterfaceEnum(name: String): CheckResult {
     Log.i(TAG, "=== CHECK: $name ===")
     return try {
         val ifaces =
@@ -325,7 +357,6 @@ private fun checkNetworkInterfaceEnum(): CheckResult {
         val vpnNames = mutableListOf<String>()
         for (iface in ifaces) {
             allNames.add(iface.name)
-            Log.i(TAG, "[$name] ${iface.name} up=${iface.isUp} loopback=${iface.isLoopback} p2p=${iface.isPointToPoint}")
             if (VPN_PREFIXES.any { iface.name.startsWith(it) }) vpnNames.add(iface.name)
         }
         val detail =
@@ -344,8 +375,10 @@ private fun checkNetworkInterfaceEnum(): CheckResult {
 }
 
 @Suppress("DEPRECATION")
-private fun checkAllNetworksVpn(cm: ConnectivityManager): CheckResult {
-    val name = "getAllNetworks() VPN scan"
+private fun checkAllNetworksVpn(
+    cm: ConnectivityManager,
+    name: String,
+): CheckResult {
     Log.i(TAG, "=== CHECK: $name ===")
     val networks = cm.allNetworks
     if (networks.isEmpty()) {
@@ -354,29 +387,22 @@ private fun checkAllNetworksVpn(cm: ConnectivityManager): CheckResult {
     val vpnNetworks = mutableListOf<String>()
     for (net in networks) {
         val caps = cm.getNetworkCapabilities(net) ?: continue
-        val hasVpn = caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-        val transports = mutableListOf<String>()
-        mapOf(
-            NetworkCapabilities.TRANSPORT_CELLULAR to "CELLULAR",
-            NetworkCapabilities.TRANSPORT_WIFI to "WIFI",
-            NetworkCapabilities.TRANSPORT_VPN to "VPN",
-            NetworkCapabilities.TRANSPORT_ETHERNET to "ETHERNET",
-        ).forEach { (id, label) -> if (caps.hasTransport(id)) transports.add(label) }
-        Log.i(TAG, "[$name] Network $net: [${transports.joinToString()}] VPN=$hasVpn")
-        if (hasVpn) vpnNetworks.add(net.toString())
+        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) vpnNetworks.add(net.toString())
     }
     val detail =
         if (vpnNetworks.isEmpty()) {
             "PASS: ${networks.size} networks, none have TRANSPORT_VPN"
         } else {
-            "FAIL: ${vpnNetworks.size} network(s) with TRANSPORT_VPN: [${vpnNetworks.joinToString()}]"
+            "FAIL: ${vpnNetworks.size} network(s) with TRANSPORT_VPN"
         }
     Log.i(TAG, "[$name] $detail")
     return CheckResult(name, vpnNetworks.isEmpty(), detail)
 }
 
-private fun checkActiveNetworkVpn(cm: ConnectivityManager): CheckResult {
-    val name = "11. ActiveNetwork transports"
+private fun checkActiveNetworkVpn(
+    cm: ConnectivityManager,
+    name: String,
+): CheckResult {
     Log.i(TAG, "=== CHECK: $name ===")
     val net =
         cm.activeNetwork
@@ -404,8 +430,10 @@ private fun checkActiveNetworkVpn(cm: ConnectivityManager): CheckResult {
     return CheckResult(name, !hasVpn, detail)
 }
 
-private fun checkLinkPropertiesIfname(cm: ConnectivityManager): CheckResult {
-    val name = "12. LinkProperties ifname"
+private fun checkLinkPropertiesIfname(
+    cm: ConnectivityManager,
+    name: String,
+): CheckResult {
     Log.i(TAG, "=== CHECK: $name ===")
     val net =
         cm.activeNetwork
@@ -416,10 +444,6 @@ private fun checkLinkPropertiesIfname(cm: ConnectivityManager): CheckResult {
     val ifname = lp.interfaceName ?: "(null)"
     val routes = lp.routes.map { "${it.destination} via ${it.gateway} dev ${it.`interface`}" }
     val dns = lp.dnsServers.map { it.hostAddress ?: "?" }
-    Log.i(TAG, "[$name] ifname=$ifname")
-    Log.i(TAG, "[$name] routes=${routes.joinToString("; ")}")
-    Log.i(TAG, "[$name] dns=${dns.joinToString(", ")}")
-    Log.i(TAG, "[$name] httpProxy=${lp.httpProxy}")
     val isVpn = VPN_PREFIXES.any { ifname.startsWith(it) }
     val detail =
         if (!isVpn) {
@@ -431,27 +455,24 @@ private fun checkLinkPropertiesIfname(cm: ConnectivityManager): CheckResult {
     return CheckResult(name, !isVpn, detail)
 }
 
-private fun checkProxyHost(): CheckResult {
-    val name = "14. System proxy properties"
+private fun checkProxyHost(name: String): CheckResult {
     Log.i(TAG, "=== CHECK: $name ===")
     val httpHost = System.getProperty("http.proxyHost")
-    val httpPort = System.getProperty("http.proxyPort")
     val socksHost = System.getProperty("socksProxyHost")
-    val socksPort = System.getProperty("socksProxyPort")
-    Log.i(TAG, "[$name] http=$httpHost:$httpPort, socks=$socksHost:$socksPort")
     val hasProxy = !httpHost.isNullOrEmpty() || !socksHost.isNullOrEmpty()
     val detail =
         if (!hasProxy) {
             "PASS: no proxy (http=$httpHost, socks=$socksHost)"
         } else {
+            val httpPort = System.getProperty("http.proxyPort")
+            val socksPort = System.getProperty("socksProxyPort")
             "FAIL: proxy found — http=$httpHost:$httpPort, socks=$socksHost:$socksPort"
         }
     Log.i(TAG, "[$name] $detail")
     return CheckResult(name, !hasProxy, detail)
 }
 
-private fun checkProcNetRouteJava(): CheckResult {
-    val name = "15. /proc/net/route (Java)"
+private fun checkProcNetRouteJava(name: String): CheckResult {
     Log.i(TAG, "=== CHECK: $name ===")
     return try {
         val allLines = mutableListOf<String>()
@@ -460,7 +481,6 @@ private fun checkProcNetRouteJava(): CheckResult {
             var line: String?
             while (br.readLine().also { line = it } != null) {
                 allLines.add(line!!)
-                Log.i(TAG, "[$name] $line")
                 if (VPN_PREFIXES.any { line!!.startsWith(it) }) vpnLines.add(line!!.take(60))
             }
         }
@@ -475,7 +495,7 @@ private fun checkProcNetRouteJava(): CheckResult {
     } catch (e: Exception) {
         val msg = e.message ?: ""
         if (msg.contains("EACCES") || msg.contains("Permission denied")) {
-            val detail = "PASS: access denied by SELinux — app cannot read /proc/net/route"
+            val detail = "PASS: access denied by SELinux"
             Log.i(TAG, "[$name] $detail")
             return CheckResult(name, true, detail)
         }
