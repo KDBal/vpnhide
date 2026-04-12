@@ -342,19 +342,21 @@ fn parse_hex_addr6(hex: &[u8]) -> Option<[u32; 4]> {
 
 const NLMSG_ALIGNTO: usize = 4;
 const NLMSG_HDRLEN: usize = 16; // sizeof(struct nlmsghdr), already aligned
-const RTM_NEWLINK: u16 = 16;
-const RTM_NEWADDR: u16 = 20;
+pub(crate) const RTM_NEWLINK: u16 = 16;
+pub(crate) const RTM_NEWADDR: u16 = 20;
 
 const fn nlmsg_align(len: usize) -> usize {
     (len + NLMSG_ALIGNTO - 1) & !(NLMSG_ALIGNTO - 1)
 }
 
-fn read_u32_ne(data: &[u8], off: usize) -> u32 {
-    u32::from_ne_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]])
+fn read_u32_ne(data: &[u8], off: usize) -> Option<u32> {
+    let bytes: &[u8; 4] = data.get(off..off + 4)?.try_into().ok()?;
+    Some(u32::from_ne_bytes(*bytes))
 }
 
-fn read_u16_ne(data: &[u8], off: usize) -> u16 {
-    u16::from_ne_bytes([data[off], data[off + 1]])
+fn read_u16_ne(data: &[u8], off: usize) -> Option<u16> {
+    let bytes: &[u8; 2] = data.get(off..off + 2)?.try_into().ok()?;
+    Some(u16::from_ne_bytes(*bytes))
 }
 
 /// Filter netlink dump responses in-place: remove `RTM_NEWLINK` and
@@ -375,19 +377,24 @@ pub fn filter_netlink_dump(data: &mut [u8], vpn_indices: &[u32]) -> usize {
     let mut write_pos = 0usize;
 
     while read_pos + NLMSG_HDRLEN <= len {
-        let nlmsg_len = read_u32_ne(data, read_pos) as usize;
+        let Some(nlmsg_len_raw) = read_u32_ne(data, read_pos) else {
+            break;
+        };
+        let nlmsg_len = nlmsg_len_raw as usize;
         if nlmsg_len < NLMSG_HDRLEN || read_pos + nlmsg_len > len {
             break;
         }
         let aligned_len = nlmsg_align(nlmsg_len).min(len - read_pos);
-        let nlmsg_type = read_u16_ne(data, read_pos + 4);
+        let Some(nlmsg_type) = read_u16_ne(data, read_pos + 4) else {
+            break;
+        };
 
         let hide = if (nlmsg_type == RTM_NEWLINK || nlmsg_type == RTM_NEWADDR)
             && nlmsg_len >= NLMSG_HDRLEN + 8
         {
             // Interface index is at payload offset 4 in both
             // ifinfomsg and ifaddrmsg.
-            let if_index = read_u32_ne(data, read_pos + NLMSG_HDRLEN + 4);
+            let if_index = read_u32_ne(data, read_pos + NLMSG_HDRLEN + 4).unwrap_or(0);
             vpn_indices.contains(&if_index)
         } else {
             false
@@ -548,9 +555,9 @@ mod tests {
         // Should have removed exactly the vpn_idx message (24 bytes).
         assert_eq!(new_len, 24 * (orig_msgs - 1));
         // First remaining msg should be wlan_idx.
-        assert_eq!(read_u32_ne(&buf, NLMSG_HDRLEN + 4), wlan_idx);
+        assert_eq!(read_u32_ne(&buf, NLMSG_HDRLEN + 4), Some(wlan_idx));
         // Second remaining msg should also be wlan_idx.
-        assert_eq!(read_u32_ne(&buf, 24 + NLMSG_HDRLEN + 4), wlan_idx);
+        assert_eq!(read_u32_ne(&buf, 24 + NLMSG_HDRLEN + 4), Some(wlan_idx));
     }
 
     #[test]
@@ -564,8 +571,8 @@ mod tests {
 
         let new_len = filter_netlink_dump(&mut buf, &[vpn_idx]);
         assert_eq!(new_len, 24); // only lo remains
-        assert_eq!(read_u16_ne(&buf, 4), RTM_NEWLINK);
-        assert_eq!(read_u32_ne(&buf, NLMSG_HDRLEN + 4), lo_idx);
+        assert_eq!(read_u16_ne(&buf, 4), Some(RTM_NEWLINK));
+        assert_eq!(read_u32_ne(&buf, NLMSG_HDRLEN + 4), Some(lo_idx));
     }
 
     #[test]
@@ -600,9 +607,9 @@ mod tests {
         let new_len = filter_netlink_dump(&mut buf, &[7]);
         // Should keep DONE + wlan = 48 bytes
         assert_eq!(new_len, 48);
-        assert_eq!(read_u16_ne(&buf, 4), nlmsg_done_type);
-        assert_eq!(read_u16_ne(&buf, 24 + 4), RTM_NEWADDR);
-        assert_eq!(read_u32_ne(&buf, 24 + NLMSG_HDRLEN + 4), 2);
+        assert_eq!(read_u16_ne(&buf, 4), Some(nlmsg_done_type));
+        assert_eq!(read_u16_ne(&buf, 24 + 4), Some(RTM_NEWADDR));
+        assert_eq!(read_u32_ne(&buf, 24 + NLMSG_HDRLEN + 4), Some(2));
     }
 
     #[test]

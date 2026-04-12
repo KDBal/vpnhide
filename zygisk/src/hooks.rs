@@ -140,7 +140,9 @@ pub unsafe extern "C" fn hooked_ioctl(
     if request == SIOCGIFFLAGS as libc::c_ulong {
         if !arg.is_null() {
             let req = unsafe { &*(arg as *const ifreq) };
-            let name_bytes = unsafe { &*(&req.ifr_name as *const [libc::c_char]) };
+            let name_bytes = unsafe {
+                core::slice::from_raw_parts(req.ifr_name.as_ptr().cast::<u8>(), req.ifr_name.len())
+            };
             if is_vpn_iface_bytes(name_bytes) {
                 set_errno(libc::ENODEV);
                 return -1;
@@ -155,7 +157,9 @@ pub unsafe extern "C" fn hooked_ioctl(
         let ret = unsafe { real(fd, request, arg) };
         if ret == 0 && !arg.is_null() {
             let req = unsafe { &*(arg as *const ifreq) };
-            let name_bytes = unsafe { &*(&req.ifr_name as *const [libc::c_char]) };
+            let name_bytes = unsafe {
+                core::slice::from_raw_parts(req.ifr_name.as_ptr().cast::<u8>(), req.ifr_name.len())
+            };
             if is_vpn_iface_bytes(name_bytes) {
                 set_errno(libc::ENODEV);
                 return -1;
@@ -197,7 +201,9 @@ unsafe fn filter_ifconf(ifc: *mut ifconf) {
 
     for i in 0..n {
         let entry = unsafe { &*ifc.ifc_req.offset(i as isize) };
-        let name_bytes = unsafe { &*(&entry.ifr_name as *const [libc::c_char]) };
+        let name_bytes = unsafe {
+            core::slice::from_raw_parts(entry.ifr_name.as_ptr().cast::<u8>(), entry.ifr_name.len())
+        };
         if is_vpn_iface_bytes(name_bytes) {
             continue;
         }
@@ -529,10 +535,23 @@ unsafe fn open_filtered_proc_net(
     }
 
     if filtered_len > 0 {
-        unsafe {
-            libc::write(memfd, buf.as_ptr() as *const c_void, filtered_len);
-            libc::lseek(memfd, 0, libc::SEEK_SET);
+        let mut written = 0usize;
+        while written < filtered_len {
+            let n = unsafe {
+                libc::write(
+                    memfd,
+                    buf[written..].as_ptr() as *const c_void,
+                    filtered_len - written,
+                )
+            };
+            if n < 0 {
+                unsafe { libc::close(memfd) };
+                set_errno(libc::EIO);
+                return -1;
+            }
+            written += n as usize;
         }
+        unsafe { libc::lseek(memfd, 0, libc::SEEK_SET) };
     }
 
     memfd
@@ -684,8 +703,7 @@ pub unsafe extern "C" fn hooked_recvmsg(fd: c_int, msg: *mut libc::msghdr, flags
 
     // Quick check: first message type must be RTM_NEWADDR or RTM_NEWLINK.
     let nlmsg_type = u16::from_ne_bytes([buf[4], buf[5]]);
-    if nlmsg_type != 20 && nlmsg_type != 16 {
-        // 20 = RTM_NEWADDR, 16 = RTM_NEWLINK
+    if nlmsg_type != crate::filter::RTM_NEWADDR && nlmsg_type != crate::filter::RTM_NEWLINK {
         return ret;
     }
 

@@ -54,31 +54,39 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private fun suExec(cmd: String): Pair<Int, String> {
-    return try {
+private fun suExec(cmd: String): Pair<Int, String> =
+    try {
         val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
-        val stdout = proc.inputStream.bufferedReader().readText()
-        val exitCode = proc.waitFor()
-        exitCode to stdout
+        try {
+            // Drain stderr in the background to prevent the process from
+            // blocking if it produces error output.
+            val stderrDrain = Thread { proc.errorStream.readBytes() }
+            stderrDrain.start()
+            val stdout = proc.inputStream.bufferedReader().readText()
+            val exitCode = proc.waitFor()
+            stderrDrain.join()
+            exitCode to stdout
+        } finally {
+            proc.destroy()
+        }
     } catch (e: Exception) {
         Log.e(TAG, "su exec failed: ${e.message}")
         -1 to ""
     }
-}
 
-private suspend fun suExecAsync(cmd: String): Pair<Int, String> =
-    withContext(Dispatchers.IO) { suExec(cmd) }
+private suspend fun suExecAsync(cmd: String): Pair<Int, String> = withContext(Dispatchers.IO) { suExec(cmd) }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VpnHideApp() {
     val darkTheme = isSystemInDarkTheme()
-    val colorScheme = if (android.os.Build.VERSION.SDK_INT >= 31) {
-        val context = LocalContext.current
-        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-    } else {
-        if (darkTheme) darkColorScheme() else lightColorScheme()
-    }
+    val colorScheme =
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            val context = LocalContext.current
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        } else {
+            if (darkTheme) darkColorScheme() else lightColorScheme()
+        }
 
     MaterialTheme(colorScheme = colorScheme) {
         val context = LocalContext.current
@@ -102,44 +110,56 @@ fun VpnHideApp() {
 
         LaunchedEffect(Unit) {
             withContext(Dispatchers.IO) {
-                val (_, targetsRaw) = suExec(
-                    "cat $KMOD_TARGETS 2>/dev/null || cat $ZYGISK_TARGETS 2>/dev/null || true"
-                )
-                val selected = targetsRaw.lines()
-                    .map { it.trim() }
-                    .filter { it.isNotEmpty() && !it.startsWith("#") }
-                    .toSet()
+                val (_, targetsRaw) =
+                    suExec(
+                        "cat $KMOD_TARGETS 2>/dev/null || cat $ZYGISK_TARGETS 2>/dev/null || true",
+                    )
+                val selected =
+                    targetsRaw
+                        .lines()
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() && !it.startsWith("#") }
+                        .toSet()
 
                 val installedApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-                val entries = installedApps.map { info ->
-                    val label = try {
-                        pm.getApplicationLabel(info).toString()
-                    } catch (_: Exception) { info.packageName }
-                    val icon = try {
-                        pm.getApplicationIcon(info)
-                    } catch (_: Exception) { null }
-                    val isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-                    AppEntry(
-                        packageName = info.packageName,
-                        label = label,
-                        icon = icon,
-                        isSystem = isSystem,
-                        selected = info.packageName in selected,
-                    )
-                }.sortedWith(compareByDescending<AppEntry> { it.selected }.thenBy { it.label.lowercase() })
+                val entries =
+                    installedApps
+                        .map { info ->
+                            val label =
+                                try {
+                                    pm.getApplicationLabel(info).toString()
+                                } catch (_: Exception) {
+                                    info.packageName
+                                }
+                            val icon =
+                                try {
+                                    pm.getApplicationIcon(info)
+                                } catch (_: Exception) {
+                                    null
+                                }
+                            val isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                            AppEntry(
+                                packageName = info.packageName,
+                                label = label,
+                                icon = icon,
+                                isSystem = isSystem,
+                                selected = info.packageName in selected,
+                            )
+                        }.sortedWith(compareByDescending<AppEntry> { it.selected }.thenBy { it.label.lowercase() })
 
                 allApps = entries
                 loading = false
             }
         }
 
-        val filteredApps = remember(allApps, searchQuery, showSystem) {
-            val q = searchQuery.trim().lowercase()
-            allApps.filter { app ->
-                (showSystem || !app.isSystem || app.selected) &&
-                    (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
+        val filteredApps =
+            remember(allApps, searchQuery, showSystem) {
+                val q = searchQuery.trim().lowercase()
+                allApps.filter { app ->
+                    (showSystem || !app.isSystem || app.selected) &&
+                        (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
+                }
             }
-        }
 
         val selectedCount = remember(allApps) { allApps.count { it.selected } }
 
@@ -148,19 +168,21 @@ fun VpnHideApp() {
             topBar = {
                 TopAppBar(
                     title = { Text("VPN Hide") },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
+                    colors =
+                        TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ),
                 )
             },
             bottomBar = {
                 Surface(tonalElevation = 3.dp) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .navigationBarsPadding()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
@@ -180,18 +202,20 @@ fun VpnHideApp() {
                         }
                     }
                 }
-            }
+            },
         ) { innerPadding ->
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
             ) {
                 // Search + system toggle
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     OutlinedTextField(
@@ -222,11 +246,12 @@ fun VpnHideApp() {
                             AppRow(
                                 app = app,
                                 onToggle = {
-                                    allApps = allApps.map {
-                                        if (it.packageName == app.packageName) it.copy(selected = !it.selected) else it
-                                    }
+                                    allApps =
+                                        allApps.map {
+                                            if (it.packageName == app.packageName) it.copy(selected = !it.selected) else it
+                                        }
                                     dirty = true
-                                }
+                                },
                             )
                         }
                     }
@@ -238,9 +263,10 @@ fun VpnHideApp() {
         if (saving) {
             LaunchedEffect(Unit) {
                 val selected = allApps.filter { it.selected }.map { it.packageName }.sorted()
-                val body = "# Managed by VPN Hide app\n" +
-                    selected.joinToString("\n") +
-                    if (selected.isNotEmpty()) "\n" else ""
+                val body =
+                    "# Managed by VPN Hide app\n" +
+                        selected.joinToString("\n") +
+                        if (selected.isNotEmpty()) "\n" else ""
 
                 try {
                     val (exitCode, _) = suExecAsync(buildSaveCommand(body, selected))
@@ -260,7 +286,10 @@ fun VpnHideApp() {
     }
 }
 
-private fun buildSaveCommand(body: String, selectedPackages: List<String>): String {
+private fun buildSaveCommand(
+    body: String,
+    selectedPackages: List<String>,
+): String {
     val b64 = android.util.Base64.encodeToString(body.toByteArray(), android.util.Base64.NO_WRAP)
 
     val parts = mutableListOf<String>()
@@ -278,21 +307,22 @@ private fun buildSaveCommand(body: String, selectedPackages: List<String>): Stri
     // Uses the same approach as kmod/service.sh — real newlines in $UIDS via heredoc-style
     // accumulation, not printf \n escapes.
     if (selectedPackages.isNotEmpty()) {
-        val uidResolution = buildString {
-            append("ALL_PKGS=\"\$(pm list packages -U 2>/dev/null)\"")
-            append("; UIDS=\"\"")
-            for (pkg in selectedPackages) {
-                append("; U=\$(echo \"\$ALL_PKGS\" | grep '^package:$pkg ' | sed 's/.*uid://')")
-                append("; if [ -n \"\$U\" ]; then if [ -z \"\$UIDS\" ]; then UIDS=\"\$U\"; else UIDS=\"\$UIDS")
-                // Real newline in the shell string — not \n escape
-                append("\n")
-                append("\$U\"; fi; fi")
+        val uidResolution =
+            buildString {
+                append("ALL_PKGS=\"\$(pm list packages -U 2>/dev/null)\"")
+                append("; UIDS=\"\"")
+                for (pkg in selectedPackages) {
+                    append("; U=\$(echo \"\$ALL_PKGS\" | grep '^package:$pkg ' | sed 's/.*uid://')")
+                    append("; if [ -n \"\$U\" ]; then if [ -z \"\$UIDS\" ]; then UIDS=\"\$U\"; else UIDS=\"\$UIDS")
+                    // Real newline in the shell string — not \n escape
+                    append("\n")
+                    append("\$U\"; fi; fi")
+                }
+                append("; if [ -n \"\$UIDS\" ]; then echo \"\$UIDS\" > $PROC_TARGETS 2>/dev/null; echo \"\$UIDS\" > $SS_UIDS_FILE")
+                append("; else echo > $PROC_TARGETS 2>/dev/null; echo > $SS_UIDS_FILE; fi")
+                append("; chmod 644 $SS_UIDS_FILE 2>/dev/null")
+                append("; chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null")
             }
-            append("; if [ -n \"\$UIDS\" ]; then echo \"\$UIDS\" > $PROC_TARGETS 2>/dev/null; echo \"\$UIDS\" > $SS_UIDS_FILE")
-            append("; else echo > $PROC_TARGETS 2>/dev/null; echo > $SS_UIDS_FILE; fi")
-            append("; chmod 644 $SS_UIDS_FILE 2>/dev/null")
-            append("; chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null")
-        }
         parts += uidResolution
     } else {
         // No targets — clear the UIDs files. echo -n writes a zero-length
@@ -305,12 +335,16 @@ private fun buildSaveCommand(body: String, selectedPackages: List<String>): Stri
 }
 
 @Composable
-private fun AppRow(app: AppEntry, onToggle: () -> Unit) {
+private fun AppRow(
+    app: AppEntry,
+    onToggle: () -> Unit,
+) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onToggle)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(

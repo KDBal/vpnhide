@@ -12,7 +12,7 @@ permissions:
   packages: read
 
 jobs:
-  lint-rust:
+  lint:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/${{ github.repository }}/ci:latest
@@ -25,6 +25,8 @@ jobs:
           submodules: recursive
       - name: Mark workspace safe
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # Rust
       - name: rustfmt
         run: |
           cd zygisk && cargo fmt --check
@@ -33,6 +35,16 @@ jobs:
         run: cd zygisk && cargo ndk -t arm64-v8a clippy -- -D warnings
       - name: clippy (test-app)
         run: cd test-app/native && cargo ndk -t arm64-v8a clippy -- -D warnings
+      - name: cargo test (zygisk)
+        run: cd zygisk && cargo test
+
+      # C (kernel module)
+      - name: clang-format
+        run: clang-format --dry-run --Werror kmod/vpnhide_kmod.c
+
+      # Kotlin
+      - name: ktlint
+        run: ktlint "lsposed/**/*.kt" "test-app/**/*.kt"
 
   kmod:
     runs-on: ubuntu-latest

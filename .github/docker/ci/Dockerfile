@@ -19,8 +19,15 @@ RUN apt-get update && \
         openjdk-17-jdk-headless \
         bc kmod cpio flex bison libssl-dev libelf-dev \
         binutils-aarch64-linux-gnu \
+        clang-format \
         git && \
     rm -rf /var/lib/apt/lists/*
+
+# ── ktlint (for lsposed / test-app Kotlin) ──────────────────────────
+ENV KTLINT_VERSION=1.8.0
+RUN curl -fsSL -o /usr/local/bin/ktlint \
+        "https://github.com/pinterest/ktlint/releases/download/${KTLINT_VERSION}/ktlint" && \
+    chmod +x /usr/local/bin/ktlint
 
 # ── Rust toolchain (for zygisk) ──────────────────────────────────────
 ENV RUSTUP_HOME=/usr/local/rustup \

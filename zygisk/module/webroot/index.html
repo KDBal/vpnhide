@@ -272,6 +272,10 @@
     countEl.textContent = `${n} selected`;
   }
 
+  // Android package names are [a-zA-Z0-9_.], but validate to prevent
+  // shell injection if a non-standard name somehow slips through.
+  const SAFE_PKG_RE = /^[a-zA-Z0-9_.\-]+$/;
+
   async function save() {
     saveBtn.disabled = true;
     try {
@@ -279,6 +283,8 @@
         .filter(p => p.selected)
         .map(p => p.pkg)
         .sort();
+      const unsafe = selected.find(p => !SAFE_PKG_RE.test(p));
+      if (unsafe) throw new Error(`invalid package name: ${unsafe}`);
       const body =
         '# Managed by the vpnhide_zygisk WebUI.\n' +
         '# One package name per line. Lines starting with # are comments.\n' +

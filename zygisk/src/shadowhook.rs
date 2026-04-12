@@ -7,7 +7,7 @@
 //! `aarch64-linux-android`; see `build.rs`.
 
 use core::ffi::{c_char, c_int, c_void};
-use core::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Once;
 
 #[allow(non_camel_case_types)]
 #[repr(C)]
@@ -41,22 +41,22 @@ unsafe extern "C" {
     fn shadowhook_unhook(stub: *mut c_void) -> c_int;
 }
 
-static INIT_DONE: AtomicBool = AtomicBool::new(false);
+static INIT: Once = Once::new();
+static mut INIT_RC: c_int = 0;
 
 /// Initialize shadowhook exactly once per process. Returns Ok on success
 /// or if already initialized; Err with the raw return code otherwise.
 pub fn init_once() -> Result<(), c_int> {
-    if INIT_DONE.load(Ordering::Acquire) {
-        return Ok(());
-    }
-    // SAFETY: FFI call with no arguments that reference Rust memory.
-    let rc = unsafe { shadowhook_init(ShadowhookMode::Unique as c_int, false) };
-    if rc == 0 {
-        INIT_DONE.store(true, Ordering::Release);
-        Ok(())
-    } else {
-        Err(rc)
-    }
+    INIT.call_once(|| {
+        // SAFETY: FFI call with no arguments that reference Rust memory.
+        let rc = unsafe { shadowhook_init(ShadowhookMode::Unique as c_int, false) };
+        // SAFETY: written exactly once inside call_once, read only after.
+        unsafe { INIT_RC = rc };
+    });
+    // SAFETY: INIT_RC is only written inside call_once above and never
+    // mutated again; all reads happen after call_once has completed.
+    let rc = unsafe { INIT_RC };
+    if rc == 0 { Ok(()) } else { Err(rc) }
 }
 
 /// Install an inline hook on `lib!sym`. `new_fn` is the replacement
