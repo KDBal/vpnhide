@@ -46,3 +46,4 @@ test-app/.kotlin/
 *.swp
 *.log
 /tmp/
+/*.zip
