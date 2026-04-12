@@ -30,7 +30,7 @@ mod filter;
 mod hooks;
 mod shadowhook;
 
-use std::fs;
+
 use std::sync::Once;
 
 use jni::JNIEnv;
@@ -275,12 +275,24 @@ fn hook_libc_sym(
 /// ContentProviders are initialized.
 fn scrub_shadowhook_maps() {
     let names_to_scrub: &[&str] = &["shadowhook-island", "shadowhook-enter"];
-    let maps = match fs::read_to_string("/proc/self/maps") {
-        Ok(m) => m,
-        Err(e) => {
-            log::warn!("scrub_shadowhook_maps: can't read /proc/self/maps: {e}");
+    // Use raw open to bypass our own hooked_openat — /proc/self/maps is
+    // not in the filter list today, but a future addition would silently
+    // break this function.
+    let maps = {
+        use std::io::Read;
+        use std::os::fd::FromRawFd;
+        let fd = unsafe { libc::open(c"/proc/self/maps".as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC) };
+        if fd < 0 {
+            log::warn!("scrub_shadowhook_maps: can't open /proc/self/maps");
             return;
         }
+        let mut file = unsafe { std::fs::File::from_raw_fd(fd) };
+        let mut buf = String::new();
+        if file.read_to_string(&mut buf).is_err() {
+            log::warn!("scrub_shadowhook_maps: can't read /proc/self/maps");
+            return;
+        }
+        buf
     };
 
     for line in maps.lines() {

@@ -543,6 +543,12 @@ static int fib_route_entry(struct kretprobe_instance *ri,
 	return 0;
 }
 
+/*
+ * We access seq->buf and seq->count without seq_file's internal mutex.
+ * This is safe because seq_read() drives the ->show() callback
+ * synchronously under its own fd context — no concurrent access to
+ * the same seq_file is possible between our entry and return handlers.
+ */
 static int fib_route_ret(struct kretprobe_instance *ri,
 			 struct pt_regs *regs)
 {
@@ -684,6 +690,9 @@ static void __exit vpnhide_exit(void)
 module_init(vpnhide_init);
 module_exit(vpnhide_exit);
 
+/* The source is MIT-licensed (see SPDX header), but MODULE_LICENSE("GPL")
+ * is required to resolve EXPORT_SYMBOL_GPL symbols (kretprobes, etc.)
+ * at module load time. */
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("okhsunrog");
 MODULE_DESCRIPTION("Hide VPN interfaces from selected apps at kernel level");

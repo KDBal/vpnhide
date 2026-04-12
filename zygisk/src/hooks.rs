@@ -697,8 +697,7 @@ pub unsafe extern "C" fn hooked_recvmsg(fd: c_int, msg: *mut libc::msghdr, flags
 
     // Quick check: first message type must be RTM_NEWADDR or RTM_NEWLINK.
     let nlmsg_type = u16::from_ne_bytes([buf[4], buf[5]]);
-    if nlmsg_type != 20 && nlmsg_type != 16 {
-        // 20 = RTM_NEWADDR, 16 = RTM_NEWLINK
+    if nlmsg_type != crate::filter::RTM_NEWADDR && nlmsg_type != crate::filter::RTM_NEWLINK {
         return ret;
     }
 

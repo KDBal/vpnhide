@@ -342,8 +342,8 @@ fn parse_hex_addr6(hex: &[u8]) -> Option<[u32; 4]> {
 
 const NLMSG_ALIGNTO: usize = 4;
 const NLMSG_HDRLEN: usize = 16; // sizeof(struct nlmsghdr), already aligned
-const RTM_NEWLINK: u16 = 16;
-const RTM_NEWADDR: u16 = 20;
+pub(crate) const RTM_NEWLINK: u16 = 16;
+pub(crate) const RTM_NEWADDR: u16 = 20;
 
 const fn nlmsg_align(len: usize) -> usize {
     (len + NLMSG_ALIGNTO - 1) & !(NLMSG_ALIGNTO - 1)
