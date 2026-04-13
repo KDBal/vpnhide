@@ -1,13 +1,35 @@
 {
-  "version": "0.5.0",
+  "version": "0.5.1",
   "sections": [
     {
-      "type": "added",
+      "type": "fixed",
       "items": [
         {
-          "en": "Built-in diagnostics merged into the main app (separate test app removed)",
-          "ru": "Встроенная диагностика перенесена в основное приложение (отдельное тестовое приложение удалено)"
+          "en": "Fixed false \"LSPosed/Vector not installed\" warning when LSPosed uses non-standard module path (e.g. zygisk_lsposed)",
+          "ru": "Исправлено ложное предупреждение «LSPosed/Vector не установлен» при нестандартном пути модуля (например, zygisk_lsposed)"
         },
+        {
+          "en": "Fixed false LSPosed config warnings when hooks are already active at runtime",
+          "ru": "Исправлены ложные предупреждения о конфигурации LSPosed, когда хуки уже активны"
+        },
+        {
+          "en": "\"No target apps configured\" now checks all modules, not just LSPosed",
+          "ru": "«Целевые приложения не настроены» теперь проверяет все модули, а не только LSPosed"
+        }
+      ]
+    }
+  ],
+  "history": [
+    {
+      "version": "0.5.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Built-in diagnostics merged into the main app (separate test app removed)",
+              "ru": "Встроенная диагностика перенесена в основное приложение (отдельное тестовое приложение удалено)"
+            },
         {
           "en": "New app icon and chameleon mascot branding",
           "ru": "Новая иконка приложения и брендинг с маскотом-хамелеоном"
@@ -68,8 +90,8 @@
         }
       ]
     }
-  ],
-  "history": [
+  ]
+},
     {
       "version": "0.4.2",
       "sections": [

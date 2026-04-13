@@ -361,20 +361,17 @@ internal fun loadDashboardState(
     }
 
     fun detectLsposedFramework(): LsposedFramework {
-        val moduleDir = "/data/adb/modules/zygisk_vector"
-        val updateDir = "/data/adb/modules_update/zygisk_vector"
-        val (exitCode, out) =
-            suExec(
-                "if [ -f $moduleDir/module.prop ]; then " +
-                    "echo installed=1; " +
-                    "echo disabled=$([ -f $moduleDir/disable ] && echo 1 || echo 0); " +
-                    "elif [ -f $updateDir/module.prop ]; then " +
-                    "echo installed=1; " +
-                    "echo disabled=$([ -f $updateDir/disable ] && echo 1 || echo 0); " +
-                    "else " +
-                    "echo installed=0; " +
-                    "fi",
-            )
+        // Known module directory names for LSPosed / LSPosed-Next / Vector
+        val knownIds = listOf("zygisk_vector", "zygisk_lsposed", "lsposed")
+        val checkScript = knownIds.flatMap { id ->
+            listOf("/data/adb/modules/$id", "/data/adb/modules_update/$id")
+        }.joinToString("; ") { dir ->
+            "if [ -f $dir/module.prop ]; then " +
+                "echo installed=1; " +
+                "echo disabled=\$([ -f $dir/disable ] && echo 1 || echo 0); " +
+                "exit 0; fi"
+        } + "; echo installed=0"
+        val (exitCode, out) = suExec(checkScript)
         val props = parseProps(out)
         val installed = exitCode == 0 && props["installed"] == "1"
         val disabled = props["disabled"] == "1"
@@ -503,37 +500,41 @@ internal fun loadDashboardState(
     if (!hasNative) {
         issues += res.getString(R.string.dashboard_issue_no_native)
     }
-    if (lsposedFramework is LsposedFramework.NotInstalled) {
+    if (lsposedFramework is LsposedFramework.NotInstalled && lsposed !is LsposedState.Active) {
         issues += res.getString(R.string.dashboard_issue_lsposed_not_installed)
     }
     if (lsposed is LsposedState.NeedsReboot) {
         issues += res.getString(R.string.dashboard_issue_reboot)
     }
-    when (lsposedConfig) {
-        null -> {
-            issues += res.getString(R.string.dashboard_issue_lsposed_config_unreadable)
-        }
+    // Only report LSPosed config issues when hooks are not already active at runtime —
+    // if hooks are active, the config is clearly working regardless of what we detect on disk
+    if (lsposed !is LsposedState.Active) {
+        when (lsposedConfig) {
+            null -> {
+                issues += res.getString(R.string.dashboard_issue_lsposed_config_unreadable)
+            }
 
-        LsposedConfig.ModuleNotConfigured -> {
-            if (lsposedFramework is LsposedFramework.Installed) {
+            LsposedConfig.ModuleNotConfigured -> {
+                if (lsposedFramework is LsposedFramework.Installed) {
+                    issues += res.getString(R.string.dashboard_issue_lsposed_not_enabled)
+                }
+            }
+
+            LsposedConfig.Disabled -> {
                 issues += res.getString(R.string.dashboard_issue_lsposed_not_enabled)
             }
-        }
 
-        LsposedConfig.Disabled -> {
-            issues += res.getString(R.string.dashboard_issue_lsposed_not_enabled)
-        }
-
-        is LsposedConfig.Enabled -> {
-            if (!lsposedConfig.hasSystemFramework) {
-                issues += res.getString(R.string.dashboard_issue_lsposed_no_system_scope)
-            }
-            if (lsposedConfig.extraEntries.isNotEmpty()) {
-                issues +=
-                    res.getString(
-                        R.string.dashboard_issue_lsposed_extra_scope,
-                        lsposedConfig.extraEntries.map(::resolveScopeEntryLabel).joinToString(", "),
-                    )
+            is LsposedConfig.Enabled -> {
+                if (!lsposedConfig.hasSystemFramework) {
+                    issues += res.getString(R.string.dashboard_issue_lsposed_no_system_scope)
+                }
+                if (lsposedConfig.extraEntries.isNotEmpty()) {
+                    issues +=
+                        res.getString(
+                            R.string.dashboard_issue_lsposed_extra_scope,
+                            lsposedConfig.extraEntries.map(::resolveScopeEntryLabel).joinToString(", "),
+                        )
+                }
             }
         }
     }
@@ -544,10 +545,11 @@ internal fun loadDashboardState(
     if (zygisk is ModuleState.Installed && zygisk.version != null && normalizeVersion(zygisk.version) != normalizeVersion(appVersion)) {
         issues += buildModuleVersionIssue(NativeModuleKind.Zygisk, zygisk.version, appVersion)
     }
+    val totalTargets = lsposedTargetCount + kmodTargetCount + zygiskTargetCount
+    if (totalTargets == 0) {
+        issues += res.getString(R.string.dashboard_issue_no_targets)
+    }
     if (lsposed is LsposedState.Active) {
-        if (lsposedTargetCount == 0) {
-            issues += res.getString(R.string.dashboard_issue_no_targets)
-        }
         val runningVersion = lsposed.version
         if (runningVersion != null && runningVersion != appVersion) {
             Log.w(TAG, "version mismatch: running=$runningVersion app=$appVersion")
