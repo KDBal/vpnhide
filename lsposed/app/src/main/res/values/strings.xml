@@ -35,6 +35,7 @@
     <string name="banner_ready">VPN is active. This app is in the target list. Ready to run checks.</string>
     <string name="banner_added_self">Added this app to the target list. Restart the app for native-level checks to take effect.</string>
     <string name="banner_adding_self">Adding this app to target list&#8230;</string>
+    <string name="banner_network_blocked">Network access is disabled for this app. ioctl checks (SIOCGIFFLAGS, SIOCGIFMTU, SIOCGIFCONF) cannot run without it. Enable in Settings → Apps → VPN Hide → Mobile data &amp; Wi-Fi.</string>
     <string name="section_native">Native level (kmod / zygisk)</string>
     <string name="section_java">Java API level (LSPosed)</string>
 

@@ -34,6 +34,7 @@
     <string name="banner_ready">VPN активен. Приложение в списке целевых. Готово к запуску проверок.</string>
     <string name="banner_added_self">Приложение добавлено в список целевых. Перезапустите приложение для работы нативных проверок.</string>
     <string name="banner_adding_self">Добавление приложения в список целевых&#8230;</string>
+    <string name="banner_network_blocked">Доступ к сети отключён для этого приложения. Проверки ioctl (SIOCGIFFLAGS, SIOCGIFMTU, SIOCGIFCONF) не могут быть выполнены. Включите в Настройки → Приложения → VPN Hide → Мобильный интернет и Wi-Fi.</string>
     <string name="section_native">Нативный уровень (kmod / zygisk)</string>
     <string name="section_java">Java API уровень (LSPosed)</string>
 </resources>

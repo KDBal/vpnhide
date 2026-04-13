@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.outlined.FilterAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -131,6 +132,7 @@ private enum class Tab { Apps, Diagnostics }
 @Composable
 private fun MainScreen() {
     var currentTab by remember { mutableStateOf(Tab.Apps) }
+    var showSystem by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -141,6 +143,22 @@ private fun MainScreen() {
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                         titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     ),
+                actions = {
+                    if (currentTab == Tab.Apps) {
+                        IconButton(onClick = { showSystem = !showSystem }) {
+                            Icon(
+                                Icons.Outlined.FilterAlt,
+                                contentDescription = stringResource(R.string.filter_system),
+                                tint =
+                                    if (showSystem) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    },
+                            )
+                        }
+                    }
+                },
             )
         },
         bottomBar = {
@@ -161,8 +179,16 @@ private fun MainScreen() {
         },
     ) { innerPadding ->
         when (currentTab) {
-            Tab.Apps -> AppPickerScreen(Modifier.padding(innerPadding))
-            Tab.Diagnostics -> DiagnosticsScreen(Modifier.padding(innerPadding))
+            Tab.Apps -> {
+                AppPickerScreen(
+                    showSystem = showSystem,
+                    modifier = Modifier.padding(innerPadding),
+                )
+            }
+
+            Tab.Diagnostics -> {
+                DiagnosticsScreen(Modifier.padding(innerPadding))
+            }
         }
     }
 }
@@ -254,13 +280,15 @@ private fun RootDeniedScreen() {
 }
 
 @Composable
-fun AppPickerScreen(modifier: Modifier = Modifier) {
+fun AppPickerScreen(
+    showSystem: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val pm = context.packageManager
 
     var allApps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
-    var showSystem by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
     var dirty by remember { mutableStateOf(false) }
@@ -366,28 +394,16 @@ fun AppPickerScreen(modifier: Modifier = Modifier) {
                     .fillMaxSize()
                     .padding(innerPadding),
         ) {
-            // Search + system toggle
-            Row(
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text(stringResource(R.string.search_placeholder)) },
+                singleLine = true,
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text(stringResource(R.string.search_placeholder)) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(8.dp))
-                FilterChip(
-                    selected = showSystem,
-                    onClick = { showSystem = !showSystem },
-                    label = { Text(stringResource(R.string.filter_system)) },
-                )
-            }
+            )
 
             if (loading) {
                 Box(

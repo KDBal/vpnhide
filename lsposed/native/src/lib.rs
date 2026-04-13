@@ -101,6 +101,10 @@ fn check_ioctl_siocgifflags() -> String {
     unsafe {
         let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
         if fd < 0 {
+            let err = last_os_errno();
+            if err == libc::ECONNREFUSED {
+                return "NETWORK_BLOCKED: socket() returned ECONNREFUSED — network access disabled for this app".into();
+            }
             return format!("FAIL: cannot create socket: {}", last_os_error());
         }
 
@@ -136,6 +140,10 @@ fn check_ioctl_siocgifmtu() -> String {
     unsafe {
         let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
         if fd < 0 {
+            let err = last_os_errno();
+            if err == libc::ECONNREFUSED {
+                return "NETWORK_BLOCKED: socket() returned ECONNREFUSED — network access disabled for this app".into();
+            }
             return format!("FAIL: cannot create socket: {}", last_os_error());
         }
 
@@ -165,6 +173,10 @@ fn check_ioctl_siocgifconf() -> String {
     unsafe {
         let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
         if fd < 0 {
+            let err = last_os_errno();
+            if err == libc::ECONNREFUSED {
+                return "NETWORK_BLOCKED: socket() returned ECONNREFUSED — network access disabled for this app".into();
+            }
             return format!("FAIL: cannot create socket: {}", last_os_error());
         }
 
