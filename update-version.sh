@@ -30,13 +30,12 @@ sed -i '0,/^version = ".*"/s//version = "'"${VERSION}"'"/' zygisk/Cargo.toml
 sed -i 's/versionCode = [0-9]*/versionCode = '"${VERSION_CODE}"'/' lsposed/app/build.gradle.kts
 sed -i 's/versionName = ".*"/versionName = "'"${VERSION}"'"/' lsposed/app/build.gradle.kts
 
-# test-app app/build.gradle.kts
-sed -i 's/versionCode = [0-9]*/versionCode = '"${VERSION_CODE}"'/' test-app/app/build.gradle.kts
-sed -i 's/versionName = ".*"/versionName = "'"${VERSION}"'"/' test-app/app/build.gradle.kts
+# lsposed native Cargo.toml
+sed -i '0,/^version = ".*"/s//version = "'"${VERSION}"'"/' lsposed/native/Cargo.toml
 
 echo "Updated:"
 echo "  kmod/module/module.prop"
 echo "  zygisk/module/module.prop"
 echo "  zygisk/Cargo.toml"
 echo "  lsposed/app/build.gradle.kts"
-echo "  test-app/app/build.gradle.kts"
+echo "  lsposed/native/Cargo.toml"

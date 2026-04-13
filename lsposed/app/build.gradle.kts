@@ -17,6 +17,10 @@ android {
         targetSdk = 35
         versionCode = 402
         versionName = "0.4.2"
+
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     signingConfigs {
@@ -66,6 +70,26 @@ android {
     }
 }
 
+// Build the Rust native checks library via cargo-ndk.
+val buildRustNative by tasks.registering {
+    outputs.upToDateWhen { false }
+
+    doLast {
+        exec {
+            workingDir = file("../native")
+            commandLine("cargo", "ndk", "-t", "arm64-v8a", "build", "--release")
+        }
+        val src = file("../native/target/aarch64-linux-android/release/libvpnhide_checks.so")
+        val dst = file("src/main/jniLibs/arm64-v8a/libvpnhide_checks.so")
+        dst.parentFile.mkdirs()
+        src.copyTo(dst, overwrite = true)
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn(buildRustNative)
+}
+
 dependencies {
     // Xposed API — compileOnly so it's not bundled into the APK.
     compileOnly("de.robv.android.xposed:api:82")
@@ -76,6 +100,7 @@ dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
+    implementation("androidx.compose.material:material-icons-extended")
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
 }

@@ -1,12 +1,12 @@
 [package]
-name = "vpnhide_test"
-version = "0.1.0"
+name = "vpnhide_checks"
+version = "0.4.2"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
 
 [lib]
-name = "vpnhide_test"
+name = "vpnhide_checks"
 crate-type = ["cdylib"]
 
 [dependencies]

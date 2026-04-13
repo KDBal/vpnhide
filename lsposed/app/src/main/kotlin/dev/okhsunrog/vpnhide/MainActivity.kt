@@ -14,6 +14,10 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.outlined.FilterAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,11 +36,11 @@ import kotlinx.coroutines.withContext
 
 private const val TAG = "VpnHide"
 
-private const val KMOD_TARGETS = "/data/adb/vpnhide_kmod/targets.txt"
-private const val ZYGISK_TARGETS = "/data/adb/vpnhide_zygisk/targets.txt"
-private const val ZYGISK_MODULE_TARGETS = "/data/adb/modules/vpnhide_zygisk/targets.txt"
-private const val PROC_TARGETS = "/proc/vpnhide_targets"
-private const val SS_UIDS_FILE = "/data/system/vpnhide_uids.txt"
+internal const val KMOD_TARGETS = "/data/adb/vpnhide_kmod/targets.txt"
+internal const val ZYGISK_TARGETS = "/data/adb/vpnhide_zygisk/targets.txt"
+internal const val ZYGISK_MODULE_TARGETS = "/data/adb/modules/vpnhide_zygisk/targets.txt"
+internal const val PROC_TARGETS = "/proc/vpnhide_targets"
+internal const val SS_UIDS_FILE = "/data/system/vpnhide_uids.txt"
 
 data class AppEntry(
     val packageName: String,
@@ -66,7 +70,7 @@ class MainActivity : ComponentActivity() {
  * Returns exit code and stdout. Exit code -1 means the su binary
  * couldn't be executed at all (not installed or permission denied).
  */
-private fun suExec(cmd: String): Pair<Int, String> =
+internal fun suExec(cmd: String): Pair<Int, String> =
     try {
         val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
         try {
@@ -117,7 +121,74 @@ fun VpnHideApp() {
         when (rootState) {
             RootState.Checking -> RootCheckingScreen()
             RootState.Denied -> RootDeniedScreen()
-            RootState.Granted -> AppPickerScreen()
+            RootState.Granted -> MainScreen()
+        }
+    }
+}
+
+private enum class Tab { Apps, Diagnostics }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MainScreen() {
+    var currentTab by remember { mutableStateOf(Tab.Apps) }
+    var showSystem by remember { mutableStateOf(false) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.app_name)) },
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ),
+                actions = {
+                    if (currentTab == Tab.Apps) {
+                        IconButton(onClick = { showSystem = !showSystem }) {
+                            Icon(
+                                Icons.Outlined.FilterAlt,
+                                contentDescription = stringResource(R.string.filter_system),
+                                tint =
+                                    if (showSystem) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    },
+                            )
+                        }
+                    }
+                },
+            )
+        },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = currentTab == Tab.Apps,
+                    onClick = { currentTab = Tab.Apps },
+                    icon = { Icon(Icons.Default.List, contentDescription = null) },
+                    label = { Text(stringResource(R.string.tab_apps)) },
+                )
+                NavigationBarItem(
+                    selected = currentTab == Tab.Diagnostics,
+                    onClick = { currentTab = Tab.Diagnostics },
+                    icon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
+                    label = { Text(stringResource(R.string.tab_diagnostics)) },
+                )
+            }
+        },
+    ) { innerPadding ->
+        when (currentTab) {
+            Tab.Apps -> {
+                AppPickerScreen(
+                    showSystem = showSystem,
+                    modifier = Modifier.padding(innerPadding),
+                )
+            }
+
+            Tab.Diagnostics -> {
+                DiagnosticsScreen(Modifier.padding(innerPadding))
+            }
         }
     }
 }
@@ -128,7 +199,7 @@ private fun RootCheckingScreen() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.toolbar_title)) },
+                title = { Text(stringResource(R.string.app_name)) },
                 colors =
                     TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -162,7 +233,7 @@ private fun RootDeniedScreen() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.toolbar_title)) },
+                title = { Text(stringResource(R.string.app_name)) },
                 colors =
                     TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer,
@@ -208,15 +279,16 @@ private fun RootDeniedScreen() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AppPickerScreen() {
+fun AppPickerScreen(
+    showSystem: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val pm = context.packageManager
 
     var allApps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
-    var showSystem by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
     var dirty by remember { mutableStateOf(false) }
@@ -287,23 +359,12 @@ private fun AppPickerScreen() {
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.toolbar_title)) },
-                colors =
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ),
-            )
-        },
         bottomBar = {
             Surface(tonalElevation = 3.dp) {
                 Row(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .navigationBarsPadding()
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -325,6 +386,7 @@ private fun AppPickerScreen() {
                 }
             }
         },
+        modifier = modifier,
     ) { innerPadding ->
         Column(
             modifier =
@@ -332,28 +394,16 @@ private fun AppPickerScreen() {
                     .fillMaxSize()
                     .padding(innerPadding),
         ) {
-            // Search + system toggle
-            Row(
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text(stringResource(R.string.search_placeholder)) },
+                singleLine = true,
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text(stringResource(R.string.search_placeholder)) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(8.dp))
-                FilterChip(
-                    selected = showSystem,
-                    onClick = { showSystem = !showSystem },
-                    label = { Text(stringResource(R.string.filter_system)) },
-                )
-            }
+            )
 
             if (loading) {
                 Box(

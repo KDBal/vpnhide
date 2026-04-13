@@ -1,8 +1,8 @@
-package dev.okhsunrog.vpnhide.test
+package dev.okhsunrog.vpnhide
 
 object NativeChecks {
     init {
-        System.loadLibrary("vpnhide_test")
+        System.loadLibrary("vpnhide_checks")
     }
 
     external fun checkIoctlSiocgifflags(): String

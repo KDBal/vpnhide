@@ -1,12 +1,8 @@
-package dev.okhsunrog.vpnhide.test
+package dev.okhsunrog.vpnhide
 
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.os.Bundle
 import android.util.Log
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -23,17 +19,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.NetworkInterface
-
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
-        super.onCreate(savedInstanceState)
-        setContent { VpnHideTestApp() }
-    }
-}
 
 private const val TAG = "VPNHideTest"
 private val VPN_PREFIXES = listOf("tun", "wg", "ppp", "tap", "ipsec", "xfrm")
@@ -44,127 +34,243 @@ data class CheckResult(
     val detail: String,
 )
 
-data class CheckResults(
+private data class CheckResults(
     val native: List<CheckResult>,
     val java: List<CheckResult>,
 ) {
     val all get() = native + java
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun VpnHideTestApp() {
-    val darkTheme = isSystemInDarkTheme()
-    val colorScheme =
-        if (android.os.Build.VERSION.SDK_INT >= 31) {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        } else {
-            if (darkTheme) darkColorScheme() else lightColorScheme()
+private sealed class SelfTargetState {
+    data object Checking : SelfTargetState()
+
+    data object Ready : SelfTargetState()
+
+    data object Adding : SelfTargetState()
+
+    data object NeedsRestart : SelfTargetState()
+}
+
+private suspend fun isVpnActive(): Boolean =
+    withContext(Dispatchers.IO) {
+        val (exitCode, output) = suExec("ls /sys/class/net/ 2>/dev/null")
+        if (exitCode != 0) return@withContext false
+        val vpnIfaces =
+            output
+                .lines()
+                .map { it.trim() }
+                .filter { name ->
+                    name.isNotEmpty() && VPN_PREFIXES.any { name.startsWith(it) }
+                }
+        if (vpnIfaces.isEmpty()) return@withContext false
+        vpnIfaces.any { iface ->
+            val (_, state) =
+                suExec("cat /sys/class/net/$iface/operstate 2>/dev/null")
+            state.trim() == "unknown" || state.trim() == "up"
         }
+    }
 
-    MaterialTheme(colorScheme = colorScheme) {
-        val context = LocalContext.current
-        val cm = context.getSystemService(ConnectivityManager::class.java)
-        var results by remember { mutableStateOf<CheckResults?>(null) }
-        val summaryRunning = stringResource(R.string.summary_running)
-        var summary by remember { mutableStateOf(summaryRunning) }
-        val summaryFmt = stringResource(R.string.summary_format)
+private suspend fun isSelfInTargetList(packageName: String): Boolean =
+    withContext(Dispatchers.IO) {
+        val (exitCode, output) =
+            suExec(
+                "cat $KMOD_TARGETS 2>/dev/null || cat $ZYGISK_TARGETS 2>/dev/null || true",
+            )
+        if (exitCode != 0) return@withContext false
+        output.lines().any { it.trim() == packageName }
+    }
 
-        fun updateSummary(r: CheckResults) {
-            val scored = r.all.filter { it.passed != null }
-            val passed = scored.count { it.passed == true }
-            summary = String.format(summaryFmt, passed, scored.size)
-        }
+private suspend fun addSelfToTargetList(packageName: String): Boolean =
+    withContext(Dispatchers.IO) {
+        val (_, existing) =
+            suExec(
+                "cat $KMOD_TARGETS 2>/dev/null || cat $ZYGISK_TARGETS 2>/dev/null || true",
+            )
+        val packages =
+            existing
+                .lines()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && !it.startsWith("#") }
+                .toMutableSet()
+        packages.add(packageName)
 
-        LaunchedEffect(Unit) {
-            val r = runAllChecks(cm, context)
-            results = r
-            updateSummary(r)
-        }
+        val body =
+            "# Managed by VPN Hide app\n" +
+                packages.sorted().joinToString("\n") + "\n"
+        val b64 =
+            android.util.Base64.encodeToString(
+                body.toByteArray(),
+                android.util.Base64.NO_WRAP,
+            )
 
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text(stringResource(R.string.toolbar_title)) },
-                    colors =
-                        TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        ),
+        val cmd =
+            buildString {
+                append("if [ -d /data/adb/vpnhide_kmod ]; then echo '$b64' | base64 -d > $KMOD_TARGETS && chmod 644 $KMOD_TARGETS; fi")
+                append(
+                    " ; if [ -d /data/adb/vpnhide_zygisk ]; then echo '$b64' | base64 -d > $ZYGISK_TARGETS && chmod 644 $ZYGISK_TARGETS; fi",
                 )
-            },
-        ) { innerPadding ->
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(horizontal = 16.dp)
-                        .verticalScroll(rememberScrollState()),
-            ) {
-                Spacer(Modifier.height(8.dp))
+                append(" ; cp $ZYGISK_TARGETS $ZYGISK_MODULE_TARGETS 2>/dev/null; true")
+                append(" ; ALL_PKGS=\"\$(pm list packages -U 2>/dev/null)\"; UIDS=\"\"")
+                for (pkg in packages.sorted()) {
+                    append(
+                        " ; U=\$(echo \"\$ALL_PKGS\" | grep '^package:$pkg ' | sed 's/.*uid://')",
+                    )
+                    append(
+                        " ; if [ -n \"\$U\" ]; then if [ -z \"\$UIDS\" ]; then UIDS=\"\$U\"; else UIDS=\"\$UIDS\n\$U\"; fi; fi",
+                    )
+                }
+                append(
+                    " ; if [ -n \"\$UIDS\" ]; then echo \"\$UIDS\" > $PROC_TARGETS 2>/dev/null; echo \"\$UIDS\" > $SS_UIDS_FILE; else echo > $PROC_TARGETS 2>/dev/null; echo > $SS_UIDS_FILE; fi",
+                )
+                append(
+                    " ; chmod 644 $SS_UIDS_FILE 2>/dev/null; chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null",
+                )
+            }
 
-                InfoBanner(
-                    text = stringResource(R.string.banner_warning),
+        val (exitCode, _) = suExec(cmd)
+        exitCode == 0
+    }
+
+@Composable
+fun DiagnosticsScreen(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val packageName = context.packageName
+    val cm = context.getSystemService(ConnectivityManager::class.java)
+
+    var vpnDetected by remember { mutableStateOf<Boolean?>(null) }
+    var selfTargetState by remember { mutableStateOf<SelfTargetState>(SelfTargetState.Checking) }
+    var results by remember { mutableStateOf<CheckResults?>(null) }
+    var networkBlocked by remember { mutableStateOf(false) }
+    val summaryRunning = stringResource(R.string.summary_running)
+    var summary by remember { mutableStateOf(summaryRunning) }
+    val summaryFmt = stringResource(R.string.summary_format)
+
+    fun updateResults(r: CheckResults) {
+        results = r
+        networkBlocked = r.all.any { it.detail.startsWith("NETWORK_BLOCKED:") }
+        val scored = r.all.filter { it.passed != null }
+        val passed = scored.count { it.passed == true }
+        summary = String.format(summaryFmt, passed, scored.size)
+    }
+
+    fun runChecks() {
+        summary = summaryRunning
+        results = null
+        updateResults(runAllChecks(cm, context))
+    }
+
+    LaunchedEffect(Unit) {
+        vpnDetected = isVpnActive()
+
+        if (isSelfInTargetList(packageName)) {
+            selfTargetState = SelfTargetState.Ready
+        } else {
+            selfTargetState = SelfTargetState.Adding
+            val ok = addSelfToTargetList(packageName)
+            selfTargetState =
+                if (ok) SelfTargetState.NeedsRestart else SelfTargetState.Ready
+        }
+
+        runChecks()
+    }
+
+    Column(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
+    ) {
+        Spacer(Modifier.height(8.dp))
+
+        when {
+            selfTargetState == SelfTargetState.Adding -> {
+                StatusBanner(
+                    text = stringResource(R.string.banner_adding_self),
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+
+            selfTargetState == SelfTargetState.NeedsRestart -> {
+                StatusBanner(
+                    text = stringResource(R.string.banner_added_self),
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                 )
+            }
 
-                Spacer(Modifier.height(12.dp))
-
-                Text(
-                    text = summary,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+            vpnDetected == false -> {
+                StatusBanner(
+                    text = stringResource(R.string.banner_no_vpn),
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
                 )
+            }
 
-                Spacer(Modifier.height(8.dp))
-
-                Button(
-                    onClick = {
-                        summary = summaryRunning
-                        val r = runAllChecks(cm, context)
-                        results = r
-                        updateSummary(r)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.btn_run_all))
-                }
-
-                results?.let { r ->
-                    Spacer(Modifier.height(16.dp))
-
-                    // Native section
-                    SectionHeader(stringResource(R.string.section_native))
-                    Spacer(Modifier.height(6.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (check in r.native) {
-                            CheckCard(check)
-                        }
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-
-                    // Java API section
-                    SectionHeader(stringResource(R.string.section_java))
-                    Spacer(Modifier.height(6.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (check in r.java) {
-                            CheckCard(check)
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(16.dp))
+            vpnDetected == true && selfTargetState == SelfTargetState.Ready -> {
+                StatusBanner(
+                    text = stringResource(R.string.banner_ready),
+                    containerColor = Color(0xFF1B5E20).copy(alpha = 0.15f),
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                )
             }
         }
+
+        if (networkBlocked) {
+            Spacer(Modifier.height(6.dp))
+            StatusBanner(
+                text = stringResource(R.string.banner_network_blocked),
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Text(
+            text = summary,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        Button(
+            onClick = { runChecks() },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(stringResource(R.string.btn_run_all))
+        }
+
+        results?.let { r ->
+            Spacer(Modifier.height(16.dp))
+
+            SectionHeader(stringResource(R.string.section_native))
+            Spacer(Modifier.height(6.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (check in r.native) {
+                    CheckCard(check)
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            SectionHeader(stringResource(R.string.section_java))
+            Spacer(Modifier.height(6.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (check in r.java) {
+                    CheckCard(check)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
     }
 }
 
 @Composable
-private fun InfoBanner(
+private fun StatusBanner(
     text: String,
     containerColor: Color,
     contentColor: Color,
@@ -263,7 +369,7 @@ private fun CheckCard(r: CheckResult) {
 }
 
 // ==========================================================================
-//  Check runner
+//  Check runner — runs directly in the main process
 // ==========================================================================
 
 private fun runAllChecks(
@@ -271,7 +377,7 @@ private fun runAllChecks(
     context: android.content.Context,
 ): CheckResults {
     Log.i(TAG, "========================================")
-    Log.i(TAG, "=== VPNHide Test — starting all checks ===")
+    Log.i(TAG, "=== VPNHide — starting all checks ===")
     Log.i(TAG, "========================================")
 
     val res = context.resources
@@ -313,9 +419,7 @@ private fun runAllChecks(
     val all = native + java
     val scored = all.filter { it.passed != null }
     val passed = scored.count { it.passed == true }
-    Log.i(TAG, "========================================")
     Log.i(TAG, "=== SUMMARY: $passed/${scored.size} passed ===")
-    Log.i(TAG, "========================================")
 
     return CheckResults(native = native, java = java)
 }
@@ -326,8 +430,13 @@ private fun nativeCheck(
 ): CheckResult =
     try {
         val raw = block()
-        val passed = raw.startsWith("PASS")
-        Log.i(TAG, "[$name] ${if (passed) "PASS" else "FAIL"}: $raw")
+        val passed =
+            when {
+                raw.startsWith("PASS") -> true
+                raw.startsWith("NETWORK_BLOCKED:") -> null
+                else -> false
+            }
+        Log.i(TAG, "[$name] $raw")
         CheckResult(name, passed, raw)
     } catch (e: Exception) {
         val detail = "FAIL: exception: ${e.message}"
@@ -336,19 +445,15 @@ private fun nativeCheck(
     }
 
 // ==========================================================================
-//  Java API checks (LSPosed / Binder)
+//  Java API checks
 // ==========================================================================
 
 private fun checkHasTransportVpn(
     cm: ConnectivityManager,
     name: String,
 ): CheckResult {
-    Log.i(TAG, "=== CHECK: $name ===")
-    val net = cm.activeNetwork
-    if (net == null) return CheckResult(name, true, "PASS: no active network").also { Log.i(TAG, "[$name] ${it.detail}") }
-    val caps =
-        cm.getNetworkCapabilities(net)
-            ?: return CheckResult(name, true, "PASS: no capabilities").also { Log.i(TAG, "[$name] ${it.detail}") }
+    val net = cm.activeNetwork ?: return CheckResult(name, true, "PASS: no active network")
+    val caps = cm.getNetworkCapabilities(net) ?: return CheckResult(name, true, "PASS: no capabilities")
     val hasVpn = caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
     val hasWifi = caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
     val hasCellular = caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
@@ -358,7 +463,6 @@ private fun checkHasTransportVpn(
         } else {
             "FAIL: hasTransport(VPN)=true, WIFI=$hasWifi, CELLULAR=$hasCellular"
         }
-    Log.i(TAG, "[$name] $detail")
     return CheckResult(name, !hasVpn, detail)
 }
 
@@ -366,16 +470,10 @@ private fun checkHasCapabilityNotVpn(
     cm: ConnectivityManager,
     name: String,
 ): CheckResult {
-    Log.i(TAG, "=== CHECK: $name ===")
-    val net =
-        cm.activeNetwork
-            ?: return CheckResult(name, true, "PASS: no active network").also { Log.i(TAG, "[$name] ${it.detail}") }
-    val caps =
-        cm.getNetworkCapabilities(net)
-            ?: return CheckResult(name, true, "PASS: no capabilities").also { Log.i(TAG, "[$name] ${it.detail}") }
+    val net = cm.activeNetwork ?: return CheckResult(name, true, "PASS: no active network")
+    val caps = cm.getNetworkCapabilities(net) ?: return CheckResult(name, true, "PASS: no capabilities")
     val notVpn = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
     val detail = if (notVpn) "PASS: NOT_VPN capability present" else "FAIL: NOT_VPN capability MISSING"
-    Log.i(TAG, "[$name] $detail")
     return CheckResult(name, notVpn, detail)
 }
 
@@ -383,27 +481,20 @@ private fun checkTransportInfo(
     cm: ConnectivityManager,
     name: String,
 ): CheckResult {
-    Log.i(TAG, "=== CHECK: $name ===")
-    val net =
-        cm.activeNetwork
-            ?: return CheckResult(name, true, "PASS: no active network").also { Log.i(TAG, "[$name] ${it.detail}") }
-    val caps =
-        cm.getNetworkCapabilities(net)
-            ?: return CheckResult(name, true, "PASS: no capabilities").also { Log.i(TAG, "[$name] ${it.detail}") }
+    val net = cm.activeNetwork ?: return CheckResult(name, true, "PASS: no active network")
+    val caps = cm.getNetworkCapabilities(net) ?: return CheckResult(name, true, "PASS: no capabilities")
     val info = caps.transportInfo
     val className = info?.javaClass?.name ?: "null"
     val isVpn = className.contains("VpnTransportInfo")
     val detail = if (!isVpn) "PASS: transportInfo=$className" else "FAIL: VpnTransportInfo: $info"
-    Log.i(TAG, "[$name] $detail")
     return CheckResult(name, !isVpn, detail)
 }
 
-private fun checkNetworkInterfaceEnum(name: String): CheckResult {
-    Log.i(TAG, "=== CHECK: $name ===")
-    return try {
+private fun checkNetworkInterfaceEnum(name: String): CheckResult =
+    try {
         val ifaces =
             NetworkInterface.getNetworkInterfaces()
-                ?: return CheckResult(name, true, "PASS: returned null").also { Log.i(TAG, "[$name] ${it.detail}") }
+                ?: return CheckResult(name, true, "PASS: returned null")
         val allNames = mutableListOf<String>()
         val vpnNames = mutableListOf<String>()
         for (iface in ifaces) {
@@ -416,37 +507,28 @@ private fun checkNetworkInterfaceEnum(name: String): CheckResult {
             } else {
                 "FAIL: VPN [${vpnNames.joinToString()}] in [${allNames.joinToString()}]"
             }
-        Log.i(TAG, "[$name] $detail")
         CheckResult(name, vpnNames.isEmpty(), detail)
     } catch (e: Exception) {
-        val detail = "FAIL: ${e.message}"
-        Log.e(TAG, "[$name] $detail", e)
-        CheckResult(name, false, detail)
+        CheckResult(name, false, "FAIL: ${e.message}")
     }
-}
 
 @Suppress("DEPRECATION")
 private fun checkAllNetworksVpn(
     cm: ConnectivityManager,
     name: String,
 ): CheckResult {
-    Log.i(TAG, "=== CHECK: $name ===")
     val networks = cm.allNetworks
-    if (networks.isEmpty()) {
-        return CheckResult(name, true, "PASS: no networks").also { Log.i(TAG, "[$name] ${it.detail}") }
-    }
-    val vpnNetworks = mutableListOf<String>()
-    for (net in networks) {
-        val caps = cm.getNetworkCapabilities(net) ?: continue
-        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) vpnNetworks.add(net.toString())
-    }
+    if (networks.isEmpty()) return CheckResult(name, true, "PASS: no networks")
+    val vpnNetworks =
+        networks.filter { net ->
+            cm.getNetworkCapabilities(net)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+        }
     val detail =
         if (vpnNetworks.isEmpty()) {
             "PASS: ${networks.size} networks, none have TRANSPORT_VPN"
         } else {
             "FAIL: ${vpnNetworks.size} network(s) with TRANSPORT_VPN"
         }
-    Log.i(TAG, "[$name] $detail")
     return CheckResult(name, vpnNetworks.isEmpty(), detail)
 }
 
@@ -454,13 +536,8 @@ private fun checkActiveNetworkVpn(
     cm: ConnectivityManager,
     name: String,
 ): CheckResult {
-    Log.i(TAG, "=== CHECK: $name ===")
-    val net =
-        cm.activeNetwork
-            ?: return CheckResult(name, true, "PASS: no active network").also { Log.i(TAG, "[$name] ${it.detail}") }
-    val caps =
-        cm.getNetworkCapabilities(net)
-            ?: return CheckResult(name, true, "PASS: no capabilities").also { Log.i(TAG, "[$name] ${it.detail}") }
+    val net = cm.activeNetwork ?: return CheckResult(name, true, "PASS: no active network")
+    val caps = cm.getNetworkCapabilities(net) ?: return CheckResult(name, true, "PASS: no capabilities")
     val transports = mutableListOf<String>()
     mapOf(
         NetworkCapabilities.TRANSPORT_CELLULAR to "CELLULAR",
@@ -477,7 +554,6 @@ private fun checkActiveNetworkVpn(
         } else {
             "FAIL: transports include VPN: [${transports.joinToString()}]"
         }
-    Log.i(TAG, "[$name] $detail")
     return CheckResult(name, !hasVpn, detail)
 }
 
@@ -485,13 +561,8 @@ private fun checkLinkPropertiesIfname(
     cm: ConnectivityManager,
     name: String,
 ): CheckResult {
-    Log.i(TAG, "=== CHECK: $name ===")
-    val net =
-        cm.activeNetwork
-            ?: return CheckResult(name, true, "PASS: no active network").also { Log.i(TAG, "[$name] ${it.detail}") }
-    val lp =
-        cm.getLinkProperties(net)
-            ?: return CheckResult(name, true, "PASS: no link properties").also { Log.i(TAG, "[$name] ${it.detail}") }
+    val net = cm.activeNetwork ?: return CheckResult(name, true, "PASS: no active network")
+    val lp = cm.getLinkProperties(net) ?: return CheckResult(name, true, "PASS: no link properties")
     val ifname = lp.interfaceName ?: "(null)"
     val routes = lp.routes.map { "${it.destination} via ${it.gateway} dev ${it.`interface`}" }
     val dns = lp.dnsServers.map { it.hostAddress ?: "?" }
@@ -502,7 +573,6 @@ private fun checkLinkPropertiesIfname(
         } else {
             "FAIL: ifname=$ifname is a VPN interface"
         }
-    Log.i(TAG, "[$name] $detail")
     return CheckResult(name, !isVpn, detail)
 }
 
@@ -510,13 +580,8 @@ private fun checkLinkPropertiesRoutes(
     cm: ConnectivityManager,
     name: String,
 ): CheckResult {
-    Log.i(TAG, "=== CHECK: $name ===")
-    val net =
-        cm.activeNetwork
-            ?: return CheckResult(name, true, "PASS: no active network").also { Log.i(TAG, "[$name] ${it.detail}") }
-    val lp =
-        cm.getLinkProperties(net)
-            ?: return CheckResult(name, true, "PASS: no link properties").also { Log.i(TAG, "[$name] ${it.detail}") }
+    val net = cm.activeNetwork ?: return CheckResult(name, true, "PASS: no active network")
+    val lp = cm.getLinkProperties(net) ?: return CheckResult(name, true, "PASS: no link properties")
     val routes = lp.routes
     val vpnRoutes =
         routes.filter { route ->
@@ -527,15 +592,12 @@ private fun checkLinkPropertiesRoutes(
         if (vpnRoutes.isEmpty()) {
             "PASS: ${routes.size} routes, none via VPN interfaces"
         } else {
-            val vpnDesc = vpnRoutes.joinToString("; ") { "${it.destination} dev ${it.`interface`}" }
-            "FAIL: ${vpnRoutes.size} route(s) via VPN: $vpnDesc"
+            "FAIL: ${vpnRoutes.size} route(s) via VPN"
         }
-    Log.i(TAG, "[$name] $detail")
     return CheckResult(name, vpnRoutes.isEmpty(), detail)
 }
 
 private fun checkProxyHost(name: String): CheckResult {
-    Log.i(TAG, "=== CHECK: $name ===")
     val httpHost = System.getProperty("http.proxyHost")
     val socksHost = System.getProperty("socksProxyHost")
     val hasProxy = !httpHost.isNullOrEmpty() || !socksHost.isNullOrEmpty()
@@ -547,13 +609,11 @@ private fun checkProxyHost(name: String): CheckResult {
             val socksPort = System.getProperty("socksProxyPort")
             "FAIL: proxy found — http=$httpHost:$httpPort, socks=$socksHost:$socksPort"
         }
-    Log.i(TAG, "[$name] $detail")
     return CheckResult(name, !hasProxy, detail)
 }
 
-private fun checkProcNetRouteJava(name: String): CheckResult {
-    Log.i(TAG, "=== CHECK: $name ===")
-    return try {
+private fun checkProcNetRouteJava(name: String): CheckResult =
+    try {
         val allLines = mutableListOf<String>()
         val vpnLines = mutableListOf<String>()
         BufferedReader(InputStreamReader(java.io.FileInputStream("/proc/net/route"))).use { br ->
@@ -569,17 +629,12 @@ private fun checkProcNetRouteJava(name: String): CheckResult {
             } else {
                 "FAIL: ${vpnLines.size} VPN lines:\n${vpnLines.joinToString("\n") { "  $it" }}"
             }
-        Log.i(TAG, "[$name] $detail")
         CheckResult(name, vpnLines.isEmpty(), detail)
     } catch (e: Exception) {
         val msg = e.message ?: ""
         if (msg.contains("EACCES") || msg.contains("Permission denied")) {
-            val detail = "PASS: access denied by SELinux"
-            Log.i(TAG, "[$name] $detail")
-            return CheckResult(name, true, detail)
+            CheckResult(name, true, "PASS: access denied by SELinux")
+        } else {
+            CheckResult(name, false, "FAIL: ${e.message}")
         }
-        val detail = "FAIL: ${e.message}"
-        Log.e(TAG, "[$name] $detail", e)
-        CheckResult(name, false, detail)
     }
-}

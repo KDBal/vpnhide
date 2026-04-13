@@ -101,6 +101,10 @@ fn check_ioctl_siocgifflags() -> String {
     unsafe {
         let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
         if fd < 0 {
+            let err = last_os_errno();
+            if err == libc::ECONNREFUSED {
+                return "NETWORK_BLOCKED: socket() returned ECONNREFUSED — network access disabled for this app".into();
+            }
             return format!("FAIL: cannot create socket: {}", last_os_error());
         }
 
@@ -136,6 +140,10 @@ fn check_ioctl_siocgifmtu() -> String {
     unsafe {
         let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
         if fd < 0 {
+            let err = last_os_errno();
+            if err == libc::ECONNREFUSED {
+                return "NETWORK_BLOCKED: socket() returned ECONNREFUSED — network access disabled for this app".into();
+            }
             return format!("FAIL: cannot create socket: {}", last_os_error());
         }
 
@@ -165,6 +173,10 @@ fn check_ioctl_siocgifconf() -> String {
     unsafe {
         let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
         if fd < 0 {
+            let err = last_os_errno();
+            if err == libc::ECONNREFUSED {
+                return "NETWORK_BLOCKED: socket() returned ECONNREFUSED — network access disabled for this app".into();
+            }
             return format!("FAIL: cannot create socket: {}", last_os_error());
         }
 
@@ -550,66 +562,66 @@ macro_rules! jni_fn {
 }
 
 jni_fn!(
-    Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkIoctlSiocgifflags,
+    Java_dev_okhsunrog_vpnhide_NativeChecks_checkIoctlSiocgifflags,
     check_ioctl_siocgifflags()
 );
 jni_fn!(
-    Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkIoctlSiocgifmtu,
+    Java_dev_okhsunrog_vpnhide_NativeChecks_checkIoctlSiocgifmtu,
     check_ioctl_siocgifmtu()
 );
 jni_fn!(
-    Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkIoctlSiocgifconf,
+    Java_dev_okhsunrog_vpnhide_NativeChecks_checkIoctlSiocgifconf,
     check_ioctl_siocgifconf()
 );
 jni_fn!(
-    Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkGetifaddrs,
+    Java_dev_okhsunrog_vpnhide_NativeChecks_checkGetifaddrs,
     check_getifaddrs()
 );
 jni_fn!(
-    Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkProcNetRoute,
+    Java_dev_okhsunrog_vpnhide_NativeChecks_checkProcNetRoute,
     check_proc_file("/proc/net/route")
 );
 jni_fn!(
-    Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkProcNetIfInet6,
+    Java_dev_okhsunrog_vpnhide_NativeChecks_checkProcNetIfInet6,
     check_proc_file("/proc/net/if_inet6")
 );
 jni_fn!(
-    Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkNetlinkGetlink,
+    Java_dev_okhsunrog_vpnhide_NativeChecks_checkNetlinkGetlink,
     check_netlink_getlink()
 );
 jni_fn!(
-    Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkNetlinkGetroute,
+    Java_dev_okhsunrog_vpnhide_NativeChecks_checkNetlinkGetroute,
     check_netlink_getroute()
 );
 jni_fn!(
-    Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkProcNetIpv6Route,
+    Java_dev_okhsunrog_vpnhide_NativeChecks_checkProcNetIpv6Route,
     check_proc_file("/proc/net/ipv6_route")
 );
 jni_fn!(
-    Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkProcNetTcp,
+    Java_dev_okhsunrog_vpnhide_NativeChecks_checkProcNetTcp,
     check_proc_file("/proc/net/tcp")
 );
 jni_fn!(
-    Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkProcNetTcp6,
+    Java_dev_okhsunrog_vpnhide_NativeChecks_checkProcNetTcp6,
     check_proc_file("/proc/net/tcp6")
 );
 jni_fn!(
-    Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkProcNetUdp,
+    Java_dev_okhsunrog_vpnhide_NativeChecks_checkProcNetUdp,
     check_proc_file("/proc/net/udp")
 );
 jni_fn!(
-    Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkProcNetUdp6,
+    Java_dev_okhsunrog_vpnhide_NativeChecks_checkProcNetUdp6,
     check_proc_file("/proc/net/udp6")
 );
 jni_fn!(
-    Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkProcNetDev,
+    Java_dev_okhsunrog_vpnhide_NativeChecks_checkProcNetDev,
     check_proc_file("/proc/net/dev")
 );
 jni_fn!(
-    Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkProcNetFibTrie,
+    Java_dev_okhsunrog_vpnhide_NativeChecks_checkProcNetFibTrie,
     check_proc_file("/proc/net/fib_trie")
 );
 jni_fn!(
-    Java_dev_okhsunrog_vpnhide_test_NativeChecks_checkSysClassNet,
+    Java_dev_okhsunrog_vpnhide_NativeChecks_checkSysClassNet,
     check_sys_class_net()
 );
