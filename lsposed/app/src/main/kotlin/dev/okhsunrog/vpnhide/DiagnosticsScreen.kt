@@ -41,16 +41,6 @@ private data class CheckResults(
     val all get() = native + java
 }
 
-private sealed class SelfTargetState {
-    data object Checking : SelfTargetState()
-
-    data object Ready : SelfTargetState()
-
-    data object Adding : SelfTargetState()
-
-    data object NeedsRestart : SelfTargetState()
-}
-
 private suspend fun isVpnActive(): Boolean =
     withContext(Dispatchers.IO) {
         val (exitCode, output) = suExec("ls /sys/class/net/ 2>/dev/null")
@@ -70,79 +60,18 @@ private suspend fun isVpnActive(): Boolean =
         }
     }
 
-private suspend fun isSelfInTargetList(packageName: String): Boolean =
-    withContext(Dispatchers.IO) {
-        val (exitCode, output) =
-            suExec(
-                "cat $KMOD_TARGETS 2>/dev/null || cat $ZYGISK_TARGETS 2>/dev/null || true",
-            )
-        if (exitCode != 0) return@withContext false
-        output.lines().any { it.trim() == packageName }
-    }
-
-private suspend fun addSelfToTargetList(packageName: String): Boolean =
-    withContext(Dispatchers.IO) {
-        val (_, existing) =
-            suExec(
-                "cat $KMOD_TARGETS 2>/dev/null || cat $ZYGISK_TARGETS 2>/dev/null || true",
-            )
-        val packages =
-            existing
-                .lines()
-                .map { it.trim() }
-                .filter { it.isNotEmpty() && !it.startsWith("#") }
-                .toMutableSet()
-        packages.add(packageName)
-
-        val body =
-            "# Managed by VPN Hide app\n" +
-                packages.sorted().joinToString("\n") + "\n"
-        val b64 =
-            android.util.Base64.encodeToString(
-                body.toByteArray(),
-                android.util.Base64.NO_WRAP,
-            )
-
-        val cmd =
-            buildString {
-                append("if [ -d /data/adb/vpnhide_kmod ]; then echo '$b64' | base64 -d > $KMOD_TARGETS && chmod 644 $KMOD_TARGETS; fi")
-                append(
-                    " ; if [ -d /data/adb/vpnhide_zygisk ]; then echo '$b64' | base64 -d > $ZYGISK_TARGETS && chmod 644 $ZYGISK_TARGETS; fi",
-                )
-                append(" ; cp $ZYGISK_TARGETS $ZYGISK_MODULE_TARGETS 2>/dev/null; true")
-                append(" ; ALL_PKGS=\"\$(pm list packages -U 2>/dev/null)\"; UIDS=\"\"")
-                for (pkg in packages.sorted()) {
-                    append(
-                        " ; U=\$(echo \"\$ALL_PKGS\" | grep '^package:$pkg ' | sed 's/.*uid://')",
-                    )
-                    append(
-                        " ; if [ -n \"\$U\" ]; then if [ -z \"\$UIDS\" ]; then UIDS=\"\$U\"; else UIDS=\"\$UIDS\n\$U\"; fi; fi",
-                    )
-                }
-                append(
-                    " ; if [ -n \"\$UIDS\" ]; then echo \"\$UIDS\" > $PROC_TARGETS 2>/dev/null; echo \"\$UIDS\" > $SS_UIDS_FILE; else echo > $PROC_TARGETS 2>/dev/null; echo > $SS_UIDS_FILE; fi",
-                )
-                append(
-                    " ; chmod 644 $SS_UIDS_FILE 2>/dev/null; chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null",
-                )
-            }
-
-        val (exitCode, _) = suExec(cmd)
-        exitCode == 0
-    }
-
 @Composable
-fun DiagnosticsScreen(modifier: Modifier = Modifier) {
+fun DiagnosticsScreen(
+    selfNeedsRestart: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
-    val packageName = context.packageName
     val cm = context.getSystemService(ConnectivityManager::class.java)
 
     var vpnDetected by remember { mutableStateOf<Boolean?>(null) }
-    var selfTargetState by remember { mutableStateOf<SelfTargetState>(SelfTargetState.Checking) }
     var results by remember { mutableStateOf<CheckResults?>(null) }
     var networkBlocked by remember { mutableStateOf(false) }
-    val summaryRunning = stringResource(R.string.summary_running)
-    var summary by remember { mutableStateOf(summaryRunning) }
+    var summary by remember { mutableStateOf<String?>(null) }
     val summaryFmt = stringResource(R.string.summary_format)
 
     fun updateResults(r: CheckResults) {
@@ -153,25 +82,11 @@ fun DiagnosticsScreen(modifier: Modifier = Modifier) {
         summary = String.format(summaryFmt, passed, scored.size)
     }
 
-    fun runChecks() {
-        summary = summaryRunning
-        results = null
-        updateResults(runAllChecks(cm, context))
-    }
-
     LaunchedEffect(Unit) {
         vpnDetected = isVpnActive()
-
-        if (isSelfInTargetList(packageName)) {
-            selfTargetState = SelfTargetState.Ready
-        } else {
-            selfTargetState = SelfTargetState.Adding
-            val ok = addSelfToTargetList(packageName)
-            selfTargetState =
-                if (ok) SelfTargetState.NeedsRestart else SelfTargetState.Ready
+        if (vpnDetected == true && !selfNeedsRestart) {
+            updateResults(runAllChecks(cm, context))
         }
-
-        runChecks()
     }
 
     Column(
@@ -183,38 +98,32 @@ fun DiagnosticsScreen(modifier: Modifier = Modifier) {
     ) {
         Spacer(Modifier.height(8.dp))
 
-        when {
-            selfTargetState == SelfTargetState.Adding -> {
-                StatusBanner(
-                    text = stringResource(R.string.banner_adding_self),
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            }
-
-            selfTargetState == SelfTargetState.NeedsRestart -> {
-                StatusBanner(
-                    text = stringResource(R.string.banner_added_self),
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                )
-            }
-
-            vpnDetected == false -> {
+        if (vpnDetected == false) {
+            Box(
+                modifier = Modifier.fillMaxSize().weight(1f),
+                contentAlignment = Alignment.Center,
+            ) {
                 StatusBanner(
                     text = stringResource(R.string.banner_no_vpn),
                     containerColor = MaterialTheme.colorScheme.errorContainer,
                     contentColor = MaterialTheme.colorScheme.onErrorContainer,
                 )
             }
+            return@Column
+        }
 
-            vpnDetected == true && selfTargetState == SelfTargetState.Ready -> {
-                StatusBanner(
-                    text = stringResource(R.string.banner_ready),
-                    containerColor = Color(0xFF1B5E20).copy(alpha = 0.15f),
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                )
-            }
+        if (selfNeedsRestart) {
+            StatusBanner(
+                text = stringResource(R.string.banner_added_self),
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+            )
+        } else {
+            StatusBanner(
+                text = stringResource(R.string.banner_ready),
+                containerColor = Color(0xFF1B5E20).copy(alpha = 0.15f),
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            )
         }
 
         if (networkBlocked) {
@@ -226,21 +135,13 @@ fun DiagnosticsScreen(modifier: Modifier = Modifier) {
             )
         }
 
-        Spacer(Modifier.height(12.dp))
-
-        Text(
-            text = summary,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-        )
-
-        Spacer(Modifier.height(8.dp))
-
-        Button(
-            onClick = { runChecks() },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(R.string.btn_run_all))
+        if (summary != null) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = summary!!,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
         }
 
         results?.let { r ->

@@ -44,6 +44,8 @@ use crate::hooks::{
 };
 
 const LOG_TAG: &str = "vpnhide-zygisk";
+const APP_PACKAGE: &str = "dev.okhsunrog.vpnhide";
+const APP_STATUS_FILE: &str = "/data/user/0/dev.okhsunrog.vpnhide/files/vpnhide_zygisk_active";
 /// Path to the user's allowlist. Lives OUTSIDE the module directory so
 /// it survives module updates (KSU/Magisk wipe `/data/adb/modules/<id>/`
 /// on every install). `customize.sh` is responsible for creating the
@@ -75,6 +77,9 @@ pub struct VpnHide {
     /// to hook. Read by `postAppSpecialize`. Accessed single-threaded
     /// (Zygisk calls pre/post sequentially on the zygote main thread).
     is_target: core::cell::Cell<bool>,
+    /// True only when the currently specializing app is the VPN Hide app
+    /// itself, so we can write a heartbeat the dashboard can trust.
+    report_status: core::cell::Cell<bool>,
 }
 
 // Single-threaded access by construction.
@@ -145,9 +150,11 @@ impl ZygiskModule for VpnHide {
             Some(p) if is_targeted(p) => {
                 info!("pre_app_specialize: targeting {p}");
                 self.is_target.set(true);
+                self.report_status.set(p == APP_PACKAGE);
             }
             _ => {
                 self.is_target.set(false);
+                self.report_status.set(false);
                 mark_cleanup(&mut api);
             }
         }
@@ -165,6 +172,9 @@ impl ZygiskModule for VpnHide {
         match install_hooks() {
             Ok(()) => {
                 info!("hooks installed (inline libc!ioctl + getifaddrs + openat for proc/net/*)");
+                if self.report_status.get() {
+                    write_status_file();
+                }
                 // Erase shadowhook's fingerprints from /proc/self/maps
                 // before any anti-tamper SDK gets a chance to scan
                 // them via raw syscalls.
@@ -176,6 +186,40 @@ impl ZygiskModule for VpnHide {
 
     // No pre_server_specialize override — the trait default is empty,
     // which is what we want: system_server isn't in scope for this module.
+}
+
+fn write_status_file() {
+    let boot_id = match std::fs::read_to_string("/proc/sys/kernel/random/boot_id") {
+        Ok(v) => v.trim().to_string(),
+        Err(err) => {
+            error!("failed to read boot_id: {err}");
+            return;
+        }
+    };
+    let timestamp = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+        Ok(v) => v.as_secs(),
+        Err(err) => {
+            error!("failed to get timestamp: {err}");
+            return;
+        }
+    };
+    let content = format!(
+        "version={}\nboot_id={}\npid={}\ntimestamp={}\n",
+        env!("CARGO_PKG_VERSION"),
+        boot_id,
+        std::process::id(),
+        timestamp,
+    );
+    if let Some(parent) = std::path::Path::new(APP_STATUS_FILE).parent() {
+        if let Err(err) = std::fs::create_dir_all(parent) {
+            error!("failed to create status dir {}: {err}", parent.display());
+            return;
+        }
+    }
+    match std::fs::write(APP_STATUS_FILE, content) {
+        Ok(()) => info!("wrote zygisk status heartbeat to {APP_STATUS_FILE}"),
+        Err(err) => error!("failed to write status heartbeat: {err}"),
+    }
 }
 
 /// Tell Zygisk to `dlclose` our .so once the current callback returns.

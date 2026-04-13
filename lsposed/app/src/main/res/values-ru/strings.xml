@@ -3,6 +3,7 @@
     <string name="module_description">Скрывает активное VPN-соединение от выбранных приложений — NetworkCapabilities, NetworkInfo, NetworkInterface, LinkProperties, /proc/net</string>
 
     <!-- Navigation -->
+    <string name="tab_dashboard">Обзор</string>
     <string name="tab_apps">Приложения</string>
     <string name="tab_diagnostics">Диагностика</string>
 
@@ -11,6 +12,9 @@
     <string name="btn_save">Сохранить</string>
     <string name="search_placeholder">Поиск приложений&#8230;</string>
     <string name="filter_system">Системные</string>
+    <string name="filter_show_system">Показать системные приложения</string>
+    <string name="apps_hint_toggles">Нажимайте L, K, Z для переключения отдельных уровней защиты (LSPosed, модуль ядра, Zygisk). Нажмите на строку, чтобы переключить все уровни сразу.</string>
+    <string name="apps_hint_zygisk">Некоторые приложения обнаруживают хуки Zygisk. Для таких приложений оставьте Z выключенным и используйте другие уровни защиты.</string>
 
     <!-- Root status -->
     <string name="root_error_title">Требуется root-доступ</string>
@@ -22,6 +26,49 @@
     <string name="save_failed_exit">Ошибка сохранения (код выхода %d)</string>
     <string name="save_failed_error">Ошибка сохранения: %s</string>
     <string name="save_failed_root">Ошибка сохранения: root-доступ запрещён</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard_modules">Модули</string>
+    <string name="dashboard_kmod">Модуль ядра</string>
+    <string name="dashboard_zygisk">VPN Hide Zygisk модуль</string>
+    <string name="dashboard_lsposed_module">VPN Hide LSPosed-хук</string>
+    <string name="dashboard_not_installed">Не установлен</string>
+    <string name="dashboard_installed_inactive">Установлен, неактивен</string>
+    <string name="dashboard_active_targets">Активен · целей: %d</string>
+    <string name="dashboard_reboot_needed">Требуется перезагрузка</string>
+    <string name="dashboard_protection">Статус защиты</string>
+    <string name="dashboard_native_protection">Нативный уровень</string>
+    <string name="dashboard_java_protection">Java API уровень</string>
+    <string name="dashboard_protection_ok">ОК</string>
+    <string name="dashboard_protection_partial">Частично</string>
+    <string name="dashboard_protection_fail">Не работает</string>
+    <string name="dashboard_protection_unknown">Не проверено</string>
+    <string name="dashboard_protection_no_module">Нет модуля</string>
+    <string name="dashboard_protection_hooks_inactive">Хуки неактивны</string>
+    <string name="dashboard_needs_restart">Приложение только что добавлено в список целей. Перезапустите приложение для проверки защиты.</string>
+    <string name="dashboard_no_vpn">VPN не активен. Включите VPN для проверки защиты.</string>
+    <string name="dashboard_install_recommendation_title">Рекомендация по установке</string>
+    <string name="dashboard_install_recommendation_device">Ваше устройство: %1$s, ядро %2$s</string>
+    <string name="dashboard_install_recommendation_kmod">Рекомендуется модуль ядра. Скачайте %1$s.</string>
+    <string name="dashboard_install_recommendation_zygisk">Для вашего устройства модуль ядра не поддерживается. Установите %1$s.</string>
+    <string name="dashboard_install_recommendation_zygisk_warning">Некоторые приложения определяют Zygisk-хуки. Для таких приложений отключите Zygisk-защиту и используйте другие методы защиты.</string>
+    <string name="dashboard_issues">Проблемы (%d)</string>
+    <string name="dashboard_issue_no_native">Нативный модуль не установлен. Установите kmod или zygisk для полной защиты.</string>
+    <string name="dashboard_issue_lsposed_not_installed">LSPosed/Vector не установлен. Установите его и включите модуль VPN Hide для System Framework.</string>
+    <string name="dashboard_issue_reboot">LSPosed настроен правильно, но его хуки ещё не активны. Перезагрузите устройство, чтобы активировать их.</string>
+    <string name="dashboard_issue_lsposed_config_unreadable">Не удалось прочитать конфигурацию LSPosed/Vector. Откройте LSPosed/Vector, проверьте что VPN Hide там включён, затем снова откройте VPN Hide.</string>
+    <string name="dashboard_issue_lsposed_not_enabled">VPN Hide найден в LSPosed/Vector, но модуль выключен. Включите VPN Hide в LSPosed/Vector и оставьте в scope System Framework.</string>
+    <string name="dashboard_issue_lsposed_no_system_scope">VPN Hide включён в LSPosed/Vector, но в его scope отсутствует System Framework. Добавьте System Framework в scope модуля VPN Hide в LSPosed/Vector.</string>
+    <string name="dashboard_issue_lsposed_extra_scope">VPN Hide в LSPosed/Vector должен быть включён только для System Framework. Уберите из scope модуля VPN Hide эти приложения: %1$s. Для фильтрации используйте вкладку «Приложения» в VPN Hide.</string>
+    <string name="dashboard_issue_no_targets">Целевые приложения не настроены. Перейдите во вкладку «Приложения».</string>
+    <string name="dashboard_issue_version_mismatch">Несоответствие версий модуля: запущена %1$s, установлена %2$s. Перезагрузитесь для обновления.</string>
+    <string name="dashboard_issue_update_kmod">Версия модуля ядра %1$s старее версии приложения %2$s. Обновите модуль ядра.</string>
+    <string name="dashboard_issue_update_zygisk">Версия модуля Zygisk %1$s старее версии приложения %2$s. Обновите модуль Zygisk.</string>
+    <string name="dashboard_issue_update_app_for_kmod">Версия модуля ядра %1$s новее версии приложения %2$s. Обновите приложение VPN Hide.</string>
+    <string name="dashboard_issue_update_app_for_zygisk">Версия модуля Zygisk %1$s новее версии приложения %2$s. Обновите приложение VPN Hide.</string>
+    <string name="dashboard_issue_kmod_version_mismatch">Несоответствие версий модуля ядра: модуль %1$s, приложение %2$s. Держите их на одной версии.</string>
+    <string name="dashboard_issue_zygisk_version_mismatch">Несоответствие версий модуля Zygisk: модуль %1$s, приложение %2$s. Держите их на одной версии.</string>
+    <string name="dashboard_running_version">Версия запущенного модуля: %s</string>
 
     <!-- Diagnostics -->
     <string name="summary_running">Выполняется&#8230;</string>
