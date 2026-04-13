@@ -23,13 +23,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Diagnostics runner in a separate process — no Vector/LSPosed
-             runtime injected, so native checks behave like a normal app. -->
-        <service
-            android:name=".CheckRunnerService"
-            android:process=":checks"
-            android:exported="false" />
-
         <!-- LSPosed / Vector module metadata -->
         <meta-data
             android:name="xposedmodule"

@@ -32,21 +32,6 @@ kmod/vpnhide_kmod.ko
 kmod/module/vpnhide_kmod.ko
 kmod/.env
 
-# Test app
-test-app/.gradle/
-test-app/build/
-test-app/app/build/
-test-app/app/.cxx/
-test-app/app/src/main/jniLibs/
-test-app/native/target/
-test-app/.idea/
-test-app/*.iml
-test-app/local.properties
-test-app/.kotlin/
-test-app/*.jks
-test-app/*.keystore
-test-app/keystore.properties
-
 # General
 *.swp
 *.log
