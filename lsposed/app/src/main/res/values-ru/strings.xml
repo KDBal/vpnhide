@@ -44,6 +44,11 @@
     <string name="dashboard_protection_hooks_inactive">Хуки неактивны</string>
     <string name="dashboard_needs_restart">Приложение только что добавлено в список целей. Перезапустите приложение для проверки защиты.</string>
     <string name="dashboard_no_vpn">VPN не активен. Включите VPN для проверки защиты.</string>
+    <string name="dashboard_install_recommendation_title">Рекомендация по установке</string>
+    <string name="dashboard_install_recommendation_device">Ваше устройство: %1$s, ядро %2$s</string>
+    <string name="dashboard_install_recommendation_kmod">Рекомендуется модуль ядра. Скачайте %1$s.</string>
+    <string name="dashboard_install_recommendation_zygisk">Для вашего устройства модуль ядра не поддерживается. Установите %1$s.</string>
+    <string name="dashboard_install_recommendation_zygisk_warning">Некоторые приложения определяют Zygisk-хуки. Для таких приложений отключите Zygisk-защиту и используйте другие методы защиты.</string>
     <string name="dashboard_issues">Проблемы (%d)</string>
     <string name="dashboard_issue_no_native">Нативный модуль не установлен. Установите kmod или zygisk для полной защиты.</string>
     <string name="dashboard_issue_lsposed_not_installed">LSPosed/Vector не установлен. Установите его и включите модуль VPN Hide для System Framework.</string>

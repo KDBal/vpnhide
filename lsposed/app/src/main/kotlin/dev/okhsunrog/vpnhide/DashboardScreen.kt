@@ -1,5 +1,6 @@
 package dev.okhsunrog.vpnhide
 
+import android.os.Build
 import android.database.sqlite.SQLiteDatabase
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
@@ -89,8 +90,17 @@ private data class DashboardState(
     val kmod: ModuleState,
     val zygisk: ModuleState,
     val lsposed: LsposedState,
+    val nativeInstallRecommendation: NativeInstallRecommendation?,
     val protection: ProtectionCheck,
     val issues: List<String>,
+)
+
+private data class NativeInstallRecommendation(
+    val androidVersion: String,
+    val kernelVersion: String,
+    val kernelBranch: String?,
+    val recommendedArtifact: String,
+    val preferKmod: Boolean,
 )
 
 // ── Screen ───────────────────────────────────────────────────────────────
@@ -138,6 +148,10 @@ fun DashboardScreen(
         ModuleCard(stringResource(R.string.dashboard_kmod), s.kmod)
         Spacer(Modifier.height(8.dp))
         ModuleCard(stringResource(R.string.dashboard_zygisk), s.zygisk)
+        s.nativeInstallRecommendation?.let { recommendation ->
+            Spacer(Modifier.height(8.dp))
+            NativeInstallRecommendationCard(recommendation)
+        }
 
         // Protection status
         Spacer(Modifier.height(20.dp))
@@ -321,6 +335,63 @@ private fun ModuleCardShell(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NativeInstallRecommendationCard(recommendation: NativeInstallRecommendation) {
+    val darkTheme = isSystemInDarkTheme()
+    val containerColor = if (recommendation.preferKmod) {
+        if (darkTheme) Color(0xFF0D47A1).copy(alpha = 0.28f) else Color(0xFFE3F2FD)
+    } else {
+        if (darkTheme) Color(0xFF4E342E).copy(alpha = 0.32f) else Color(0xFFFFF3E0)
+    }
+
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = stringResource(R.string.dashboard_install_recommendation_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = stringResource(
+                    R.string.dashboard_install_recommendation_device,
+                    recommendation.androidVersion,
+                    recommendation.kernelVersion,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = if (recommendation.preferKmod) {
+                    stringResource(
+                        R.string.dashboard_install_recommendation_kmod,
+                        recommendation.recommendedArtifact,
+                    )
+                } else {
+                    stringResource(
+                        R.string.dashboard_install_recommendation_zygisk,
+                        recommendation.recommendedArtifact,
+                    )
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            if (!recommendation.preferKmod) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.dashboard_install_recommendation_zygisk_warning),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
                 )
             }
         }
@@ -530,6 +601,53 @@ private fun loadDashboardState(
         }
     }
 
+    fun androidMajorVersionLabel(): String {
+        val release = Build.VERSION.RELEASE_OR_CODENAME.substringBefore('.')
+        return "Android $release"
+    }
+
+    fun parseKernelSeries(raw: String): String? =
+        Regex("""\b(\d+\.\d+)""").find(raw)?.groupValues?.get(1)
+
+    fun parseKernelAndroidBranch(raw: String): String? =
+        Regex("""android(\d+)""").find(raw)?.groupValues?.get(1)?.let { "Android $it" }
+
+    fun buildNativeInstallRecommendation(): NativeInstallRecommendation? {
+        val (_, kernelRaw) = suExec("uname -r 2>/dev/null")
+        val kernelVersion = kernelRaw.trim().ifBlank { return null }
+        val kernelSeries = parseKernelSeries(kernelVersion)
+        val kernelBranch = parseKernelAndroidBranch(kernelVersion)
+        val artifactKeyVersion = kernelBranch ?: androidMajorVersionLabel()
+        val supportedArtifact = when (artifactKeyVersion to kernelSeries) {
+            "Android 12" to "5.10" -> "vpnhide-kmod-android12-5.10.zip"
+            "Android 13" to "5.10" -> "vpnhide-kmod-android13-5.10.zip"
+            "Android 13" to "5.15" -> "vpnhide-kmod-android13-5.15.zip"
+            "Android 14" to "5.15" -> "vpnhide-kmod-android14-5.15.zip"
+            "Android 14" to "6.1" -> "vpnhide-kmod-android14-6.1.zip"
+            "Android 15" to "6.6" -> "vpnhide-kmod-android15-6.6.zip"
+            "Android 16" to "6.12" -> "vpnhide-kmod-android16-6.12.zip"
+            else -> null
+        }
+
+        return if (supportedArtifact != null) {
+            NativeInstallRecommendation(
+                androidVersion = artifactKeyVersion,
+                kernelVersion = kernelVersion,
+                kernelBranch = kernelBranch,
+                recommendedArtifact = supportedArtifact,
+                preferKmod = true,
+            )
+        } else {
+            NativeInstallRecommendation(
+                androidVersion = artifactKeyVersion,
+                kernelVersion = kernelVersion,
+                kernelBranch = kernelBranch,
+                recommendedArtifact = "vpnhide-zygisk.zip",
+                preferKmod = false,
+            )
+        }
+    }
+
     fun resolveScopeEntryLabel(entry: String): String {
         if (entry == "system" || entry == "system/0") return "System Framework"
 
@@ -687,6 +805,13 @@ private fun loadDashboardState(
         ModuleState.NotInstalled
     }
     Log.i(TAG, "zygisk: $zygisk (heartbeatBootId=$zygiskBootId currentBootId=${currentBootId.trim()})")
+    val nativeInstallRecommendation =
+        if (kmod is ModuleState.NotInstalled && zygisk is ModuleState.NotInstalled) {
+            buildNativeInstallRecommendation()
+        } else {
+            null
+        }
+    Log.i(TAG, "nativeInstallRecommendation=$nativeInstallRecommendation")
 
     // lsposed hook status
     val (_, hookStatusRaw) = suExec("cat ${HookEntry.HOOK_STATUS_FILE} 2>/dev/null || true")
@@ -811,6 +936,7 @@ private fun loadDashboardState(
         kmod = kmod,
         zygisk = zygisk,
         lsposed = lsposed,
+        nativeInstallRecommendation = nativeInstallRecommendation,
         protection = protection,
         issues = issues,
     )

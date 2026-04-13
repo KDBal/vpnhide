@@ -60,6 +60,11 @@
     <string name="dashboard_protection_hooks_inactive">Hooks inactive</string>
     <string name="dashboard_needs_restart">App was just added to targets. Restart the app to check protection.</string>
     <string name="dashboard_no_vpn">No active VPN. Turn on VPN to check protection status.</string>
+    <string name="dashboard_install_recommendation_title">Installation recommendation</string>
+    <string name="dashboard_install_recommendation_device">Your device: %1$s, kernel %2$s</string>
+    <string name="dashboard_install_recommendation_kmod">Kernel module is recommended. Download %1$s.</string>
+    <string name="dashboard_install_recommendation_zygisk">Kernel module is not supported for your device. Install %1$s.</string>
+    <string name="dashboard_install_recommendation_zygisk_warning">Some apps can detect Zygisk hooks. For those apps, disable Zygisk protection and use other protection methods instead.</string>
     <string name="dashboard_issues">Issues (%d)</string>
     <string name="dashboard_issue_no_native">No native module installed. Install kmod or zygisk for full protection.</string>
     <string name="dashboard_issue_lsposed_not_installed">LSPosed/Vector is not installed. Install it and enable the VPN Hide module for System Framework.</string>
