@@ -79,7 +79,7 @@
     <string name="dashboard_issue_lsposed_no_system_scope">VPN Hide is enabled in LSPosed/Vector, but System Framework is missing from its scope. Add System Framework to the VPN Hide scope in LSPosed/Vector.</string>
     <string name="dashboard_issue_lsposed_extra_scope">VPN Hide should stay scoped only to System Framework in LSPosed/Vector. Remove these apps from the VPN Hide scope: %1$s. Use the Apps tab in VPN Hide for filtering instead.</string>
     <string name="dashboard_issue_no_targets">No target apps configured. Go to Apps tab to select apps.</string>
-    <string name="dashboard_issue_version_mismatch">Module version mismatch: running %1$s, installed %2$s. Reboot to apply the update.</string>
+    <string name="dashboard_issue_version_mismatch">LSPosed module version mismatch: running %1$s, installed %2$s. Reboot to apply the update.</string>
     <string name="dashboard_issue_update_kmod">Kernel module version %1$s is older than app version %2$s. Open KernelSU/Magisk → Modules to update.</string>
     <string name="dashboard_issue_update_zygisk">Zygisk version %1$s is older than app version %2$s. Open KernelSU/Magisk → Modules to update.</string>
     <string name="dashboard_issue_update_app_for_kmod">Kernel module version %1$s is newer than app version %2$s. Update the VPN Hide app.</string>

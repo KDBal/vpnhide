@@ -63,7 +63,7 @@
     <string name="dashboard_issue_lsposed_no_system_scope">VPN Hide включён в LSPosed/Vector, но в его scope отсутствует System Framework. Добавьте System Framework в scope модуля VPN Hide в LSPosed/Vector.</string>
     <string name="dashboard_issue_lsposed_extra_scope">VPN Hide в LSPosed/Vector должен быть включён только для System Framework. Уберите из scope модуля VPN Hide эти приложения: %1$s. Для фильтрации используйте вкладку «Приложения» в VPN Hide.</string>
     <string name="dashboard_issue_no_targets">Целевые приложения не настроены. Перейдите во вкладку «Приложения».</string>
-    <string name="dashboard_issue_version_mismatch">Несоответствие версий модуля: запущена %1$s, установлена %2$s. Перезагрузитесь для обновления.</string>
+    <string name="dashboard_issue_version_mismatch">Несоответствие версий LSPosed модуля: запущена %1$s, установлена %2$s. Перезагрузитесь для обновления.</string>
     <string name="dashboard_issue_update_kmod">Версия модуля ядра %1$s старее версии приложения %2$s. Откройте KernelSU/Magisk → Модули для обновления.</string>
     <string name="dashboard_issue_update_zygisk">Версия модуля Zygisk %1$s старее версии приложения %2$s. Откройте KernelSU/Magisk → Модули для обновления.</string>
     <string name="dashboard_issue_update_app_for_kmod">Версия модуля ядра %1$s новее версии приложения %2$s. Обновите приложение VPN Hide.</string>

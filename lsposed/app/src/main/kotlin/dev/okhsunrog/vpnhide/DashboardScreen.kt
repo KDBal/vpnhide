@@ -202,11 +202,12 @@ private fun ModuleCard(
 private fun LsposedCard(state: LsposedState) {
     val darkTheme = isSystemInDarkTheme()
     val moduleName = stringResource(R.string.dashboard_lsposed_module)
+    val installedVersion = BuildConfig.VERSION_NAME
     when (state) {
         is LsposedState.NotInstalled -> {
             ModuleCardShell(
                 name = moduleName,
-                version = null,
+                version = installedVersion,
                 subtitle = stringResource(R.string.dashboard_not_installed),
                 dotColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -216,7 +217,7 @@ private fun LsposedCard(state: LsposedState) {
         is LsposedState.InstalledInactive -> {
             ModuleCardShell(
                 name = moduleName,
-                version = state.version,
+                version = installedVersion,
                 subtitle = stringResource(R.string.dashboard_installed_inactive),
                 dotColor = Color(0xFFFF9800),
                 containerColor = if (darkTheme) Color(0xFFE65100).copy(alpha = 0.2f) else Color(0xFFFFF3E0),
@@ -226,7 +227,7 @@ private fun LsposedCard(state: LsposedState) {
         is LsposedState.NeedsReboot -> {
             ModuleCardShell(
                 name = moduleName,
-                version = state.version,
+                version = installedVersion,
                 subtitle = stringResource(R.string.dashboard_reboot_needed),
                 dotColor = Color(0xFFFF9800),
                 containerColor = if (darkTheme) Color(0xFFE65100).copy(alpha = 0.2f) else Color(0xFFFFF3E0),
@@ -243,7 +244,7 @@ private fun LsposedCard(state: LsposedState) {
                     }
             ModuleCardShell(
                 name = moduleName,
-                version = state.version,
+                version = installedVersion,
                 subtitle = subtitle,
                 dotColor = Color(0xFF4CAF50),
                 containerColor = if (darkTheme) Color(0xFF1B5E20).copy(alpha = 0.3f) else Color(0xFFE8F5E9),

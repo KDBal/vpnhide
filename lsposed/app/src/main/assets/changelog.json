@@ -5,6 +5,14 @@
       "type": "added",
       "items": [
         {
+          "en": "Built-in diagnostics merged into the main app (separate test app removed)",
+          "ru": "Встроенная диагностика перенесена в основное приложение (отдельное тестовое приложение удалено)"
+        },
+        {
+          "en": "New app icon and chameleon mascot branding",
+          "ru": "Новая иконка приложения и брендинг с маскотом-хамелеоном"
+        },
+        {
           "en": "Dashboard with module status, LSPosed config validation, version checks, and live protection verification",
           "ru": "Панель обзора со статусом модулей, проверкой конфигурации LSPosed, проверкой версий и проверкой защиты в реальном времени"
         },
@@ -31,8 +39,29 @@
       ]
     },
     {
+      "type": "changed",
+      "items": [
+        {
+          "en": "Replaced WebUI with native Compose UI for module management",
+          "ru": "WebUI заменён нативным Compose UI для управления модулями"
+        },
+        {
+          "en": "Zygisk API lowered from v5 to v2 for Magisk v27 compatibility",
+          "ru": "Версия Zygisk API понижена с v5 до v2 для совместимости с Magisk v27"
+        },
+        {
+          "en": "Apps tab: search in top bar, filter menu, fast scroll with letter indicator, Russian apps filter",
+          "ru": "Вкладка приложений: поиск в верхней панели, меню фильтров, быстрая прокрутка с буквенным индикатором, фильтр российских приложений"
+        }
+      ]
+    },
+    {
       "type": "fixed",
       "items": [
+        {
+          "en": "Fixed potential system_server crash caused by race condition in writeToParcel hooks",
+          "ru": "Исправлен потенциальный краш system_server из-за race condition в хуках writeToParcel"
+        },
         {
           "en": "App no longer removes itself from target lists when saving",
           "ru": "Приложение больше не удаляет себя из списков целей при сохранении"
