@@ -8,22 +8,36 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -32,6 +46,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
+import io.github.oikvpqya.compose.fastscroller.VerticalScrollbar
+import io.github.oikvpqya.compose.fastscroller.indicator.IndicatorConstants
+import io.github.oikvpqya.compose.fastscroller.material3.defaultMaterialScrollbarStyle
+import io.github.oikvpqya.compose.fastscroller.rememberScrollbarAdapter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -242,6 +260,12 @@ private fun MainScreen() {
     val context = LocalContext.current
     var currentTab by remember { mutableStateOf(Tab.Dashboard) }
     var selfNeedsRestart by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var searchActive by remember { mutableStateOf(false) }
+    var showSystem by remember { mutableStateOf(false) }
+    var showRussianOnly by remember { mutableStateOf(false) }
+    var showFilterMenu by remember { mutableStateOf(false) }
+    var showHelp by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         selfNeedsRestart =
@@ -251,16 +275,113 @@ private fun MainScreen() {
             }
     }
 
+    // Clear search when leaving Apps tab
+    LaunchedEffect(currentTab) {
+        if (currentTab != Tab.Apps) {
+            searchActive = false
+            searchQuery = ""
+        }
+    }
+
+    if (showHelp) {
+        AppsHelpDialog(onDismiss = { showHelp = false })
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.app_name)) },
-                colors =
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ),
-            )
+            if (searchActive && currentTab == Tab.Apps) {
+                SearchBar(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    onSearch = {},
+                    active = false,
+                    onActiveChange = {},
+                    placeholder = { Text(stringResource(R.string.search_placeholder)) },
+                    leadingIcon = {
+                        IconButton(onClick = {
+                            searchActive = false
+                            searchQuery = ""
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                        }
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = null)
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {}
+            } else {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.app_name)) },
+                    colors =
+                        TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ),
+                    actions = {
+                        if (currentTab == Tab.Apps) {
+                            IconButton(onClick = { searchActive = true }) {
+                                Icon(
+                                    Icons.Default.Search,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                            }
+                            Box {
+                                val anyFilterActive = showSystem || showRussianOnly
+                                IconButton(onClick = { showFilterMenu = true }) {
+                                    Icon(
+                                        Icons.Default.FilterList,
+                                        contentDescription = null,
+                                        tint =
+                                            if (anyFilterActive) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.onPrimaryContainer
+                                            },
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showFilterMenu,
+                                    onDismissRequest = { showFilterMenu = false },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.filter_show_system)) },
+                                        onClick = { showSystem = !showSystem },
+                                        leadingIcon = {
+                                            Checkbox(
+                                                checked = showSystem,
+                                                onCheckedChange = null,
+                                            )
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.filter_russian_only)) },
+                                        onClick = { showRussianOnly = !showRussianOnly },
+                                        leadingIcon = {
+                                            Checkbox(
+                                                checked = showRussianOnly,
+                                                onCheckedChange = null,
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                            IconButton(onClick = { showHelp = true }) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.HelpOutline,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                            }
+                        }
+                    },
+                )
+            }
         },
         bottomBar = {
             NavigationBar {
@@ -295,6 +416,9 @@ private fun MainScreen() {
 
             Tab.Apps -> {
                 AppPickerScreen(
+                    searchQuery = searchQuery,
+                    showSystem = showSystem,
+                    showRussianOnly = showRussianOnly,
                     modifier = Modifier.padding(innerPadding),
                 )
             }
@@ -402,14 +526,17 @@ data class InstalledModules(
 )
 
 @Composable
-fun AppPickerScreen(modifier: Modifier = Modifier) {
+fun AppPickerScreen(
+    searchQuery: String,
+    showSystem: Boolean,
+    showRussianOnly: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val pm = context.packageManager
 
     var allApps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
     var installed by remember { mutableStateOf(InstalledModules()) }
-    var showSystem by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
     var dirty by remember { mutableStateOf(false) }
@@ -487,7 +614,7 @@ fun AppPickerScreen(modifier: Modifier = Modifier) {
                             zygisk = pkg in zygiskTargets,
                             lsposed = pkg in lsposedTargets,
                         )
-                    }.sortedWith(compareByDescending<AppEntry> { it.anySelected }.thenBy { it.label.lowercase() })
+                    }.sortedBy { it.label.lowercase() }
 
             allApps = entries
             loading = false
@@ -495,112 +622,32 @@ fun AppPickerScreen(modifier: Modifier = Modifier) {
     }
 
     val filteredApps =
-        remember(allApps, searchQuery, showSystem) {
+        remember(allApps, searchQuery, showSystem, showRussianOnly) {
             val q = searchQuery.trim().lowercase()
             allApps.filter { app ->
                 (showSystem || !app.isSystem || app.anySelected) &&
+                    (!showRussianOnly || isRussianApp(app.packageName, app.label)) &&
                     (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
             }
         }
 
     val selectedCount = remember(allApps) { allApps.count { it.anySelected } }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar = {
-            Surface(tonalElevation = 3.dp) {
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = stringResource(R.string.selected_count, selectedCount),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Button(
-                        onClick = {
-                            saving = true
-                            dirty = false
-                        },
-                        enabled = dirty && !saving,
-                    ) {
-                        Text(stringResource(R.string.btn_save))
-                    }
-                }
-            }
-        },
-        modifier = modifier,
-    ) { innerPadding ->
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-        ) {
-            // Hint card
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                colors =
-                    CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    ),
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .padding(top = 4.dp),
+    Column(modifier = modifier.fillMaxSize()) {
+        if (loading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = stringResource(R.string.apps_hint_toggles),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(R.string.apps_hint_zygisk),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
-                    )
-                }
+                CircularProgressIndicator()
             }
-
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text(stringResource(R.string.search_placeholder)) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(8.dp))
-                FilterChip(
-                    selected = showSystem,
-                    onClick = { showSystem = !showSystem },
-                    label = { Text(stringResource(R.string.filter_system)) },
-                )
-            }
-
-            if (loading) {
-                Box(
+        } else {
+            val listState = rememberLazyListState()
+            Box(modifier = Modifier.weight(1f)) {
+                LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
                 ) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(filteredApps, key = { it.packageName }) { app ->
                         AppRow(
                             app = app,
@@ -639,8 +686,98 @@ fun AppPickerScreen(modifier: Modifier = Modifier) {
                         )
                     }
                 }
+                val interactionSource = remember { MutableInteractionSource() }
+                val isDragging by interactionSource.collectIsDraggedAsState()
+                val indicatorAlpha by animateFloatAsState(
+                    if (isDragging) 1f else 0f,
+                    label = "indicatorAlpha",
+                )
+                VerticalScrollbar(
+                    adapter = rememberScrollbarAdapter(scrollState = listState),
+                    interactionSource = interactionSource,
+                    style = defaultMaterialScrollbarStyle(),
+                    enablePressToScroll = false,
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .fillMaxHeight(),
+                    indicator = { position, isVisible ->
+                        val firstChar =
+                            filteredApps
+                                .getOrNull(listState.firstVisibleItemIndex)
+                                ?.label
+                                ?.firstOrNull()
+                                ?.uppercase() ?: ""
+                        Box(
+                            modifier =
+                                Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(end = IndicatorConstants.Default.PADDING)
+                                    .graphicsLayer {
+                                        val y = -(IndicatorConstants.Default.MIN_HEIGHT / 2).toPx()
+                                        translationY = (y + position).coerceAtLeast(0f)
+                                        alpha = indicatorAlpha
+                                    },
+                        ) {
+                            val indicatorColor =
+                                if (isVisible) MaterialTheme.colorScheme.primary else Color.Transparent
+                            val textColor =
+                                if (isVisible) MaterialTheme.colorScheme.onPrimary else Color.Transparent
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .defaultMinSize(
+                                            minHeight = IndicatorConstants.Default.MIN_HEIGHT,
+                                            minWidth = IndicatorConstants.Default.MIN_WIDTH,
+                                        ).graphicsLayer {
+                                            clip = true
+                                            shape = IndicatorConstants.Default.SHAPE
+                                        }.drawBehind { drawRect(indicatorColor) },
+                            )
+                            Text(
+                                text = firstChar,
+                                color = textColor,
+                                textAlign = TextAlign.Center,
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier =
+                                    Modifier
+                                        .align(Alignment.CenterEnd)
+                                        .wrapContentHeight()
+                                        .padding(end = IndicatorConstants.Default.PADDING)
+                                        .width(IndicatorConstants.Default.MIN_HEIGHT),
+                            )
+                        }
+                    },
+                )
+            }
+            Surface(tonalElevation = 3.dp) {
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.selected_count, selectedCount),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Button(
+                        onClick = {
+                            saving = true
+                            dirty = false
+                        },
+                        enabled = dirty && !saving,
+                    ) {
+                        Text(stringResource(R.string.btn_save))
+                    }
+                }
             }
         }
+
+        SnackbarHost(snackbarHostState)
     }
 
     // Save effect
@@ -675,6 +812,33 @@ fun AppPickerScreen(modifier: Modifier = Modifier) {
             saving = false
         }
     }
+}
+
+@Composable
+private fun AppsHelpDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.apps_help_title)) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.apps_hint_toggles),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = stringResource(R.string.apps_hint_zygisk),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("OK") }
+        },
+    )
 }
 
 internal enum class Layer { KMOD, ZYGISK, LSPOSED }
