@@ -284,14 +284,16 @@ fn check_proc_file(path: &str) -> String {
 /// Wrapper around recvmsg for netlink sockets. Uses recvmsg (not recv/recvfrom)
 /// so that zygisk's recvmsg hook can filter the response.
 unsafe fn netlink_recv(fd: i32, buf: &mut [u8]) -> isize {
-    let mut iov = libc::iovec {
-        iov_base: buf.as_mut_ptr().cast(),
-        iov_len: buf.len(),
-    };
-    let mut msg: libc::msghdr = std::mem::zeroed();
-    msg.msg_iov = &mut iov;
-    msg.msg_iovlen = 1;
-    libc::recvmsg(fd, &mut msg, 0)
+    unsafe {
+        let mut iov = libc::iovec {
+            iov_base: buf.as_mut_ptr().cast(),
+            iov_len: buf.len(),
+        };
+        let mut msg: libc::msghdr = std::mem::zeroed();
+        msg.msg_iov = &mut iov;
+        msg.msg_iovlen = 1;
+        libc::recvmsg(fd, &mut msg, 0)
+    }
 }
 
 fn open_netlink() -> Result<i32, String> {

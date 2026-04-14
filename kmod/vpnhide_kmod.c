@@ -20,6 +20,7 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/version.h>
 #include <linux/kprobes.h>
 #include <linux/slab.h>
 #include <linux/cred.h>
@@ -237,15 +238,32 @@ static struct kretprobe dev_ioctl_krp = {
 /* ================================================================== */
 /*  Hook 2: dev_ifconf — SIOCGIFCONF interface enumeration            */
 /*                                                                    */
-/*  dev_ifconf(struct net *net, struct ifconf __user *uifc)           */
-/*  arm64: x0=net, x1=uifc (__user pointer)                          */
+/*  Kernel 5.15+:                                                     */
+/*    dev_ifconf(struct net *net, struct ifconf __user *uifc)         */
+/*    x1 = userspace pointer to struct ifconf                         */
 /*                                                                    */
-/*  After dev_ifconf returns, the userspace buffer contains ifreq     */
-/*  entries. We compact out VPN entries and update ifc_len.           */
+/*  Kernel 5.10 and earlier:                                          */
+/*    dev_ifconf(struct net *net, struct ifconf *ifc, int size)       */
+/*    x1 = kernel pointer to struct ifconf (caller did copy_from_user)*/
+/*    Caller does copy_to_user after dev_ifconf returns.              */
+/*                                                                    */
+/*  In both cases the ifreq array (ifc_buf) is a __user pointer.     */
+/*  We compact out VPN entries and update ifc_len.                    */
 /* ================================================================== */
 
+/*
+ * The signature changed in v5.15 (commit "net: dev_ifconf: pass __user
+ * pointer directly"). We detect via LINUX_VERSION_CODE at compile time
+ * since each kmod build targets a specific GKI generation.
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+#define IFCONF_IS_USER_PTR 1
+#else
+#define IFCONF_IS_USER_PTR 0
+#endif
+
 struct dev_ifconf_data {
-	struct ifconf __user *uifc;
+	void *ifconf_ptr; /* __user on 5.15+, kernel on 5.10 */
 	bool target;
 };
 
@@ -253,51 +271,71 @@ static int dev_ifconf_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	struct dev_ifconf_data *data = (void *)ri->data;
 
-	data->uifc = (struct ifconf __user *)regs->regs[1];
+	data->ifconf_ptr = (void *)regs->regs[1];
 	data->target = is_target_uid();
 	return 0;
 }
 
-static int dev_ifconf_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+/* Shared filtering logic: compact VPN entries out of the userspace
+ * ifreq array and update ifc_len. */
+static void filter_ifconf_buf(struct ifreq __user *usr_ifr, int n, int *out_len)
 {
-	struct dev_ifconf_data *data = (void *)ri->data;
-	struct ifconf ifc;
-	struct ifreq __user *usr_ifr;
 	struct ifreq tmp;
-	int i, n, dst;
-
-	if (!data->target || regs_return_value(regs) != 0 || !data->uifc)
-		return 0;
-
-	if (copy_from_user(&ifc, data->uifc, sizeof(ifc)))
-		return 0;
-	if (!ifc.ifc_req || ifc.ifc_len <= 0)
-		return 0;
-
-	n = ifc.ifc_len / (int)sizeof(struct ifreq);
-	usr_ifr = ifc.ifc_req;
-	dst = 0;
+	int i, dst = 0;
 
 	for (i = 0; i < n; i++) {
 		if (copy_from_user(&tmp, &usr_ifr[i], sizeof(tmp)))
-			return 0; /* copy failed — leave buffer untouched */
+			return; /* copy failed — leave buffer untouched */
 		tmp.ifr_name[IFNAMSIZ - 1] = '\0';
 		if (is_vpn_ifname(tmp.ifr_name))
 			continue;
 		if (dst != i) {
 			if (copy_to_user(&usr_ifr[dst], &tmp, sizeof(tmp)))
-				return 0; /* copy failed — stop compacting */
+				return; /* copy failed — stop compacting */
 		}
 		dst++;
 	}
 
-	if (dst < n) {
-		ifc.ifc_len = dst * (int)sizeof(struct ifreq);
-		/* dev_ifconf writes ifc_len via put_user, so we overwrite */
-		if (put_user(ifc.ifc_len, &data->uifc->ifc_len))
-			return 0;
-	}
+	if (dst < n)
+		*out_len = dst * (int)sizeof(struct ifreq);
+}
 
+static int dev_ifconf_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct dev_ifconf_data *data = (void *)ri->data;
+
+	if (!data->target || regs_return_value(regs) != 0 || !data->ifconf_ptr)
+		return 0;
+
+#if IFCONF_IS_USER_PTR
+	/* 5.15+: ifconf_ptr is a __user pointer */
+	{
+		struct ifconf __user *uifc = data->ifconf_ptr;
+		struct ifconf ifc;
+
+		if (copy_from_user(&ifc, uifc, sizeof(ifc)))
+			return 0;
+		if (!ifc.ifc_req || ifc.ifc_len <= 0)
+			return 0;
+
+		filter_ifconf_buf(ifc.ifc_req,
+				  ifc.ifc_len / (int)sizeof(struct ifreq),
+				  &ifc.ifc_len);
+		put_user(ifc.ifc_len, &uifc->ifc_len);
+	}
+#else
+	/* 5.10: ifconf_ptr is a kernel pointer; ifc_buf is __user */
+	{
+		struct ifconf *kifc = data->ifconf_ptr;
+
+		if (!kifc->ifc_req || kifc->ifc_len <= 0)
+			return 0;
+
+		filter_ifconf_buf(kifc->ifc_req,
+				  kifc->ifc_len / (int)sizeof(struct ifreq),
+				  &kifc->ifc_len);
+	}
+#endif
 	return 0;
 }
 
