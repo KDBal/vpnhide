@@ -1,3 +1,12 @@
+## v0.5.2
+
+### Fixes
+- Fixed SIOCGIFCONF filtering on kernel 5.10 (tun0 was visible in interface enumeration)
+- Fixed zygisk first-launch race: dashboard no longer shows false "inactive" status
+- Added recv hook in zygisk for netlink filtering on Android 10 (no SELinux block)
+- Diagnostic checks now use recvmsg (matching the hooked path) with separate recv check
+- Fixed hardcoded v0.1.0 in module installer messages
+
 ## v0.5.1
 
 ### Fixes

@@ -1,25 +1,51 @@
 {
-  "version": "0.5.1",
+  "version": "0.5.2",
   "sections": [
     {
       "type": "fixed",
       "items": [
         {
-          "en": "Fixed false \"LSPosed/Vector not installed\" warning when LSPosed uses non-standard module path (e.g. zygisk_lsposed)",
-          "ru": "Исправлено ложное предупреждение «LSPosed/Vector не установлен» при нестандартном пути модуля (например, zygisk_lsposed)"
+          "en": "Fixed SIOCGIFCONF filtering on kernel 5.10 (tun0 was visible in interface enumeration)",
+          "ru": "Исправлена фильтрация SIOCGIFCONF на ядре 5.10 (tun0 был виден при перечислении интерфейсов)"
         },
         {
-          "en": "Fixed false LSPosed config warnings when hooks are already active at runtime",
-          "ru": "Исправлены ложные предупреждения о конфигурации LSPosed, когда хуки уже активны"
+          "en": "Fixed zygisk first-launch race: dashboard no longer shows false \"inactive\" status",
+          "ru": "Исправлен race при первом запуске zygisk: панель больше не показывает ложный статус «неактивен»"
         },
         {
-          "en": "\"No target apps configured\" now checks all modules, not just LSPosed",
-          "ru": "«Целевые приложения не настроены» теперь проверяет все модули, а не только LSPosed"
+          "en": "Added recv hook in zygisk for netlink filtering on Android 10",
+          "ru": "Добавлен хук recv в zygisk для фильтрации netlink на Android 10"
+        },
+        {
+          "en": "Fixed hardcoded v0.1.0 in module installer messages",
+          "ru": "Исправлена захардкоженная версия v0.1.0 в сообщениях установщика модулей"
         }
       ]
     }
   ],
   "history": [
+    {
+      "version": "0.5.1",
+      "sections": [
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fixed false \"LSPosed/Vector not installed\" warning when LSPosed uses non-standard module path (e.g. zygisk_lsposed)",
+              "ru": "Исправлено ложное предупреждение «LSPosed/Vector не установлен» при нестандартном пути модуля (например, zygisk_lsposed)"
+            },
+            {
+              "en": "Fixed false LSPosed config warnings when hooks are already active at runtime",
+              "ru": "Исправлены ложные предупреждения о конфигурации LSPosed, когда хуки уже активны"
+            },
+            {
+              "en": "\"No target apps configured\" now checks all modules, not just LSPosed",
+              "ru": "«Целевые приложения не настроены» теперь проверяет все модули, а не только LSPosed"
+            }
+          ]
+        }
+      ]
+    },
     {
       "version": "0.5.0",
       "sections": [
