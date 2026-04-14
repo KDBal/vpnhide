@@ -4,7 +4,8 @@
 # into /data/adb/modules/<id>/ after the installer finishes.
 
 SKIPUNZIP=0
-ui_print "- VPN Hide (Zygisk native) v0.1.0"
+MOD_VER="$(grep '^version=' "$MODPATH/module.prop" | cut -d= -f2)"
+ui_print "- VPN Hide (Zygisk native) ${MOD_VER:-unknown}"
 ui_print "- Installing to $MODPATH"
 
 # Make the native library readable/executable by zygote

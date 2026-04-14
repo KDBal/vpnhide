@@ -1,6 +1,7 @@
 #!/system/bin/sh
 SKIPUNZIP=0
-ui_print "- VPN Hide (kernel) v0.1.0"
+MOD_VER="$(grep '^version=' "$MODPATH/module.prop" | cut -d= -f2)"
+ui_print "- VPN Hide (kernel) ${MOD_VER:-unknown}"
 ui_print "- Installing kernel module to $MODPATH"
 
 # Persistent config directory (survives module updates)
