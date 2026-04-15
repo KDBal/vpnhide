@@ -69,7 +69,7 @@ sealed interface JavaResult {
     data object HooksInactive : JavaResult
 }
 
-private enum class NativeModuleKind { Kmod, Zygisk }
+private enum class NativeModuleKind { Kmod, Zygisk, Ports }
 
 private sealed interface LsposedRuntime {
     data object Inactive : LsposedRuntime
@@ -167,6 +167,7 @@ internal fun loadDashboardState(
                     when (kind) {
                         NativeModuleKind.Kmod -> R.string.dashboard_issue_kmod_version_mismatch
                         NativeModuleKind.Zygisk -> R.string.dashboard_issue_zygisk_version_mismatch
+                        NativeModuleKind.Ports -> R.string.dashboard_issue_ports_version_mismatch
                     },
                     moduleVersion,
                     appVersion,
@@ -178,6 +179,7 @@ internal fun loadDashboardState(
                     when (kind) {
                         NativeModuleKind.Kmod -> R.string.dashboard_issue_update_kmod
                         NativeModuleKind.Zygisk -> R.string.dashboard_issue_update_zygisk
+                        NativeModuleKind.Ports -> R.string.dashboard_issue_update_ports
                     },
                     moduleVersion,
                     appVersion,
@@ -189,6 +191,7 @@ internal fun loadDashboardState(
                     when (kind) {
                         NativeModuleKind.Kmod -> R.string.dashboard_issue_update_app_for_kmod
                         NativeModuleKind.Zygisk -> R.string.dashboard_issue_update_app_for_zygisk
+                        NativeModuleKind.Ports -> R.string.dashboard_issue_update_app_for_ports
                     },
                     moduleVersion,
                     appVersion,
@@ -570,6 +573,9 @@ internal fun loadDashboardState(
     }
     if (zygisk is ModuleState.Installed && zygisk.version != null && normalizeVersion(zygisk.version) != normalizeVersion(appVersion)) {
         issues += buildModuleVersionIssue(NativeModuleKind.Zygisk, zygisk.version, appVersion)
+    }
+    if (ports is ModuleState.Installed && ports.version != null && normalizeVersion(ports.version) != normalizeVersion(appVersion)) {
+        issues += buildModuleVersionIssue(NativeModuleKind.Ports, ports.version, appVersion)
     }
     val totalTargets = lsposedTargetCount + kmodTargetCount + zygiskTargetCount
     if (totalTargets == 0) {
