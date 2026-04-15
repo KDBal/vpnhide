@@ -99,3 +99,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Zygisk targets reading on Magisk (SELinux blocking /data/adb/)
+
+## v0.3.1
+
+### Changed
+- CI renames APK artifacts to vpnhide-lsposed.apk and vpnhide-test.apk for clearer release downloads.
+
+## v0.3.0
+
+### Added
+- Monorepo restructure — vpnhide-zygisk, vpnhide-lsposed, and vpnhide-kmod now live in a single repository with a unified release pipeline.
+- Diagnostic test app (Compose) that exercises 23+ VPN-detection paths so you can verify the hooks are actually working on your device.
+- Kernel module gains `dev_ifconf`, `inet_fill_ifaddr`, and `inet6_fill_ifaddr` kretprobes for complete native-level VPN interface hiding.
+- Zygisk module now writes resolved UIDs to a shared file so the LSPosed system_server hooks can load them without reboot.
+
+### Changed
+- LSPosed module stripped down to system_server hooks only; native detection paths moved to zygisk and kmod where they belong.
+- Native diagnostic checks rewritten from C++ to Rust to match the zygisk module's stack.
+- Unified entire project under the MIT license.
+- CI consolidated into a single workflow: parallel builds across all 7 GKI generations (Android 12/13/14/15/16 × 5.10/5.15/6.1/6.6/6.12) using the DDK container images.
+
+### Fixed
+- Removed leftover `/proc/net/*` redirect hooks from the LSPosed module — those paths are the zygisk/kmod job and were causing duplicate filtering.
+
+## v0.2.0
+
+### Added
+- system_server-side hooks so Java API VPN hiding also works for apps using the MIR HCE SDK (which previously bypassed in-process hooks).
+- Live UID reload via `FileObserver` (inotify) — adding or removing target apps no longer requires rebooting the device.
+
+### Fixed
+- `FileObserver` is now retained from GC and watches the parent directory (not the file) so edits-as-rename reliably fire the inotify event.
+- UIDs are now read from `/data/system/` (readable by system_server under SELinux) and `writeToParcel` modifies the parcel in place instead of swapping the backing object.
+
+## v0.1.0
+
+### Added
+- Initial release — LSPosed module that hides an active VPN from apps listed in the module's LSPosed scope.
+- In-process Java hooks for `NetworkCapabilities`, `NetworkInfo`, `LinkProperties`, DNS servers, HTTP proxy, and VPN-related system properties.
+- Hook on `NetworkCapabilities.toString()` strips VPN-identifying tokens from debug representations.

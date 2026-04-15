@@ -299,6 +299,129 @@
           ]
         }
       ]
+    },
+    {
+      "version": "0.3.1",
+      "sections": [
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "CI renames APK artifacts to vpnhide-lsposed.apk and vpnhide-test.apk for clearer release downloads.",
+              "ru": "CI теперь выкладывает APK как vpnhide-lsposed.apk и vpnhide-test.apk — понятнее, что скачиваешь."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "0.3.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Monorepo restructure — vpnhide-zygisk, vpnhide-lsposed, and vpnhide-kmod now live in a single repository with a unified release pipeline.",
+              "ru": "Три модуля (zygisk, lsposed, kmod) теперь живут в одном репозитории с общим релизным пайплайном."
+            },
+            {
+              "en": "Diagnostic test app (Compose) that exercises 23+ VPN-detection paths so you can verify the hooks are actually working on your device.",
+              "ru": "Диагностическое тестовое приложение (Compose) с 23+ проверками путей обнаружения VPN — проверяйте, что хуки действительно работают на вашем устройстве."
+            },
+            {
+              "en": "Kernel module gains `dev_ifconf`, `inet_fill_ifaddr`, and `inet6_fill_ifaddr` kretprobes for complete native-level VPN interface hiding.",
+              "ru": "Ядерный модуль получил kretprobe-хуки на `dev_ifconf`, `inet_fill_ifaddr`, `inet6_fill_ifaddr` — полное скрытие VPN-интерфейса на нативном уровне."
+            },
+            {
+              "en": "Zygisk module now writes resolved UIDs to a shared file so the LSPosed system_server hooks can load them without reboot.",
+              "ru": "Zygisk-модуль пишет резолвнутые UID в общий файл, чтобы LSPosed-хуки в system_server подхватывали их без перезагрузки."
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "LSPosed module stripped down to system_server hooks only; native detection paths moved to zygisk and kmod where they belong.",
+              "ru": "LSPosed-модуль сокращён до хуков только в system_server; нативные пути обнаружения переехали в zygisk и kmod, где им и место."
+            },
+            {
+              "en": "Native diagnostic checks rewritten from C++ to Rust to match the zygisk module's stack.",
+              "ru": "Нативные диагностические проверки переписаны с C++ на Rust — в один стек с zygisk-модулем."
+            },
+            {
+              "en": "Unified entire project under the MIT license.",
+              "ru": "Весь проект унифицирован под лицензией MIT."
+            },
+            {
+              "en": "CI consolidated into a single workflow: parallel builds across all 7 GKI generations (Android 12/13/14/15/16 × 5.10/5.15/6.1/6.6/6.12) using the DDK container images.",
+              "ru": "CI собран в один workflow: параллельная сборка под все 7 GKI-генераций (Android 12/13/14/15/16 × 5.10/5.15/6.1/6.6/6.12) в DDK-контейнерах."
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Removed leftover `/proc/net/*` redirect hooks from the LSPosed module — those paths are the zygisk/kmod job and were causing duplicate filtering.",
+              "ru": "Убраны остаточные хуки редиректа `/proc/net/*` из LSPosed-модуля — эти пути обслуживает zygisk/kmod, и была двойная фильтрация."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "0.2.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "system_server-side hooks so Java API VPN hiding also works for apps using the MIR HCE SDK (which previously bypassed in-process hooks).",
+              "ru": "Хуки на стороне system_server — Java API VPN-скрытие теперь работает и для приложений с MIR HCE SDK (раньше они обходили in-process хуки)."
+            },
+            {
+              "en": "Live UID reload via `FileObserver` (inotify) — adding or removing target apps no longer requires rebooting the device.",
+              "ru": "Живой релоад списка UID через `FileObserver` (inotify) — добавление и удаление целевых приложений больше не требует перезагрузки устройства."
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "`FileObserver` is now retained from GC and watches the parent directory (not the file) so edits-as-rename reliably fire the inotify event.",
+              "ru": "`FileObserver` удерживается от сборщика мусора и следит за родительской директорией (а не за файлом) — правки-через-переименование надёжно триггерят inotify."
+            },
+            {
+              "en": "UIDs are now read from `/data/system/` (readable by system_server under SELinux) and `writeToParcel` modifies the parcel in place instead of swapping the backing object.",
+              "ru": "UID читаются из `/data/system/` (читаемо для system_server под SELinux), а `writeToParcel` модифицирует parcel на месте вместо подмены объекта."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Initial release — LSPosed module that hides an active VPN from apps listed in the module's LSPosed scope.",
+              "ru": "Первый релиз — LSPosed-модуль, скрывающий активный VPN от приложений, попавших в scope модуля."
+            },
+            {
+              "en": "In-process Java hooks for `NetworkCapabilities`, `NetworkInfo`, `LinkProperties`, DNS servers, HTTP proxy, and VPN-related system properties.",
+              "ru": "In-process Java-хуки для `NetworkCapabilities`, `NetworkInfo`, `LinkProperties`, DNS-серверов, HTTP-прокси и VPN-related системных свойств."
+            },
+            {
+              "en": "Hook on `NetworkCapabilities.toString()` strips VPN-identifying tokens from debug representations.",
+              "ru": "Хук на `NetworkCapabilities.toString()` удаляет VPN-идентифицирующие токены из отладочного представления."
+            }
+          ]
+        }
+      ]
     }
   ]
 }
