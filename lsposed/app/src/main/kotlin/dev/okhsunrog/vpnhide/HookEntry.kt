@@ -50,6 +50,7 @@ class HookEntry : IXposedHookLoadPackage {
         if (hookInstalled.compareAndSet(false, true)) {
             XposedBridge.log("VpnHide: system_server detected, installing Binder hooks")
             installSystemServerHooks()
+            tryHook("PackageVisibility") { PackageVisibilityHooks.install(lpparam.classLoader) }
             writeHookStatusFile()
         }
     }
