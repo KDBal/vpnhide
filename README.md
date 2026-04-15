@@ -43,14 +43,15 @@ vpnhide is not just one toggle. It combines three different protections that can
 
 1. **Interface hiding** — the core VPN-hiding layer. It removes VPN interfaces and routes from native APIs (`ioctl`, `getifaddrs`, `/proc/net/*`, `NetworkInterface`) and from Java APIs (`NetworkCapabilities`, `NetworkInfo`, `LinkProperties`).
 2. **Port hiding** — blocks localhost access for selected apps so they cannot detect Clash, sing-box, V2Ray, Happ, and similar tools by probing local ports.
-3. **App hiding** — hides selected installed apps from selected observer apps, useful against package visibility checks for VPN/proxy clients.
+3. **App hiding** — hides selected installed apps from selected observer apps. Useful against package visibility checks, for example when an app tries to determine whether a VPN or proxy client is installed.
 
 ## Which modules do I need?
 
-You always need the **VPN Hide app** (`vpnhide.apk`) plus one native module. The app's **Dashboard** will detect your device and recommend the right one:
+You always need the **VPN Hide app** (`vpnhide.apk`) plus one native module for interface hiding. The app can also use the optional Ports module if you want localhost port blocking:
 
 - **`kmod`** (recommended) — fully out-of-process, invisible to anti-tamper. Requires a supported GKI kernel.
 - **`zygisk`** — use this if your kernel isn't supported by kmod.
+- **`portshide`** (optional) — install this if you want to block selected apps from probing localhost ports.
 
 See [Install](#install) for step-by-step instructions.
 
@@ -65,7 +66,7 @@ Download the latest release from [Releases](https://github.com/okhsunrog/vpnhide
 3. Reboot (required — LSPosed hooks are injected into `system_server` at boot, so the module must be active before `system_server` starts)
 4. Open the VPN Hide app and grant it root access (Magisk will prompt automatically; on KernelSU-Next, grant permission manually in the manager)
 
-### Step 2 — Native module
+### Step 2 — Native module for interface hiding
 
 Open the VPN Hide app. The **Dashboard** tab will detect your device and kernel, and tell you exactly which native module to install:
 
@@ -78,7 +79,13 @@ Install the recommended module:
 
 Reboot after installing the native module.
 
-### Step 3 — Configure protections
+### Step 3 — Optional: install the Ports module
+
+If you want localhost port blocking, install `vpnhide-ports.zip` via KernelSU-Next or Magisk manager.
+
+This module is independent from kmod / zygisk and is only needed for the **Ports** mode in the app.
+
+### Step 4 — Configure protections
 
 Open the VPN Hide app → **Protection** tab.
 
@@ -116,15 +123,15 @@ Alternatively, run `adb shell uname -r` to see the kernel version string.
 
 | Dashboard — all OK | Dashboard — issues | Install recommendation |
 |:-:|:-:|:-:|
-| <img src="assets/screenshots/dashboard-all-ok.jpg" width="250"> | <img src="assets/screenshots/dashboard-issues.jpg" width="250"> | <img src="assets/screenshots/dashboard-install-recommendation.jpg" width="250"> |
+| <img src="assets/screenshots/dashboard-all-ok.png" width="250"> | <img src="assets/screenshots/dashboard-issues.jpg" width="250"> | <img src="assets/screenshots/dashboard-install-recommendation.jpg" width="250"> |
 
 | Protection — Tun | App hiding | Ports hiding |
 |:-:|:-:|:-:|
-| <img src="assets/screenshots/apps-filter-russian.jpg" width="250"> | <img src="assets/screenshots/app-hiding-list.jpg" width="250"> | <img src="assets/screenshots/ports-hiding-list.jpg" width="250"> |
+| <img src="assets/screenshots/protection-tunnels-list.png" width="250"> | <img src="assets/screenshots/app-hiding-list.png" width="250"> | <img src="assets/screenshots/ports-hiding-list.png" width="250"> |
 
 | App hiding help | Ports hiding help | Diagnostics |
 |:-:|:-:|:-:|
-| <img src="assets/screenshots/app-hiding-help.jpg" width="250"> | <img src="assets/screenshots/ports-hiding-help.jpg" width="250"> | <img src="assets/screenshots/diagnostics-native.jpg" width="250"> |
+| <img src="assets/screenshots/app-hiding-help.png" width="250"> | <img src="assets/screenshots/ports-hiding-help.png" width="250"> | <img src="assets/screenshots/diagnostics-native.jpg" width="250"> |
 
 ## Verify
 
@@ -147,6 +154,7 @@ Any issues found are shown as actionable cards with specific instructions.
 |---|---|---|
 | **[kmod/](kmod/)** | Kernel module (C) | `kretprobe` hooks in kernel space. Zero footprint in the target app's process. ([details](kmod/README.md)) |
 | **[lsposed/](lsposed/)** | LSPosed module + app (Kotlin + Rust) | Hooks `writeToParcel` in `system_server` for per-UID Binder filtering. The APK provides a dashboard (module status, version checks, LSPosed config validation, install recommendations), Protection modes for interface / port / app hiding, and diagnostics. ([details](lsposed/README.md)) |
+| **[portshide/](portshide/)** | Ports module (Shell + iptables) | Blocks selected apps from reaching `127.0.0.1` / `::1`, hiding locally bound VPN / proxy daemons from localhost port probes. ([details](portshide/README.md)) |
 | **[zygisk/](zygisk/)** | Zygisk module (Rust) | Inline-hooks `libc.so` in the target app's process. Alternative to kmod. ([details](zygisk/README.md)) |
 
 ## Detection coverage
@@ -201,7 +209,9 @@ Both implement the official Russian Ministry of Digital Development VPN/proxy de
 
 Works correctly with split-tunnel VPN configurations. Only the apps in the target list are affected.
 
-Detection apps that compare device-reported public IP against external checkers require split tunneling — the detection app's traffic must exit through the carrier, not the tunnel.
+Using split tunneling together with VPN Hide is strongly recommended.
+
+Detection apps that compare the device-reported public IP against external checkers should stay outside the tunnel — their traffic should go through the carrier, not the VPN.
 
 ## Threat model
 
