@@ -866,7 +866,27 @@ private suspend fun exportDebugZip(
             files["proc_net.txt"] = procNet
 
             // Logcat (app-level logs)
-            val (_, logcat) = suExec("logcat -d -s VPNHideTest:* VpnHide:* VpnHide-Dashboard:* 2>/dev/null | tail -200")
+            // Read logcat directly (no su) — app can read its own logs
+            val logcat =
+                try {
+                    val proc =
+                        Runtime.getRuntime().exec(
+                            arrayOf(
+                                "logcat",
+                                "-d",
+                                "-s",
+                                "VPNHideTest:*",
+                                "VpnHide:*",
+                                "VpnHide-Dashboard:*",
+                            ),
+                        )
+                    val output = proc.inputStream.bufferedReader().readText()
+                    proc.waitFor()
+                    proc.destroy()
+                    output
+                } catch (e: Exception) {
+                    "(logcat failed: ${e.message})"
+                }
             files["logcat.txt"] = logcat.ifEmpty { "(no logcat entries)" }
 
             // Create zip
