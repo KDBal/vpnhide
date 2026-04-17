@@ -206,11 +206,20 @@ internal fun loadDashboardState(
         val gkiVariant: String?,
     )
 
+    // Older CI-built zips (between commit 3fc7355 "don't dirty committed
+    // module.prop when injecting updateJson" and the gkiVariant stamping)
+    // didn't stamp `gkiVariant=` but their injected updateJson URL already
+    // encodes the KMI: `.../update-kmod-<kmi>.json`. Recover the variant
+    // from there so wrong-variant detection works for existing installs
+    // without requiring a reinstall.
+    val updateJsonKmiRegex = Regex("""update-kmod-([^/]+)\.json""")
+
     fun parseModuleProp(dir: String): ModulePropInfo {
         val (exitCode, out) = suExec("cat $dir/module.prop 2>/dev/null")
         if (exitCode != 0 || out.isBlank()) return ModulePropInfo(false, null, null)
         var version: String? = null
         var gkiVariant: String? = null
+        var updateJsonKmi: String? = null
         for (line in out.lines()) {
             when {
                 line.startsWith("version=") -> {
@@ -220,9 +229,17 @@ internal fun loadDashboardState(
                 line.startsWith("gkiVariant=") -> {
                     gkiVariant = line.removePrefix("gkiVariant=").trim().ifBlank { null }
                 }
+
+                line.startsWith("updateJson=") -> {
+                    updateJsonKmi =
+                        updateJsonKmiRegex
+                            .find(line.removePrefix("updateJson="))
+                            ?.groupValues
+                            ?.get(1)
+                }
             }
         }
-        return ModulePropInfo(true, version, gkiVariant)
+        return ModulePropInfo(true, version, gkiVariant ?: updateJsonKmi)
     }
 
     fun countTargets(path: String): Int {
