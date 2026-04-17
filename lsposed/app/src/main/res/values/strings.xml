@@ -111,7 +111,13 @@
     <string name="dashboard_install_recommendation_kmod">Kernel module is recommended. Download %1$s.</string>
     <string name="dashboard_install_recommendation_zygisk">Kernel module is not supported for your device. Install %1$s.</string>
     <string name="dashboard_install_recommendation_zygisk_warning">Some apps can detect Zygisk hooks. For those apps, disable Zygisk protection and use other protection methods instead.</string>
-    <string name="dashboard_issues">Issues (%d)</string>
+    <string name="dashboard_issues">Errors (%d)</string>
+    <string name="dashboard_warnings">Warnings (%d)</string>
+    <string name="dashboard_issue_kmod_capable_but_zygisk">Your kernel supports the kernel module, which is stealthier than Zygisk. Install %1$s and uninstall the Zygisk module.</string>
+    <string name="dashboard_issue_both_native_active">Kernel module and Zygisk are both active. Zygisk is the fallback for kernels without kmod support — running both duplicates hooks and adds fingerprint. Uninstall the Zygisk module.</string>
+    <string name="dashboard_issue_target_observer_conflict">These apps are both Tun targets and Ports observers: %1$s. If you use a transparent-proxy client (Clash, sing-box, NekoBox) that redirects traffic to 127.0.0.1, these apps will lose their internet. Remove them from Observers or from Tun.</string>
+    <string name="dashboard_issue_debug_logging_on">Debug logging is enabled. VPN Hide is writing verbose lines to logcat that anyone with root can read. Turn it off in Diagnostics after you\'ve finished collecting a bug report.</string>
+    <string name="dashboard_issue_selinux_permissive">SELinux is Permissive. Six detection vectors VPN Hide relies on the kernel to block (RTM_GETROUTE, /proc/net/{tcp,udp,dev,fib_trie}, /sys/class/net) are reachable to target apps. Run `setenforce 1` and investigate what disabled it.</string>
     <string name="dashboard_issue_no_native">No native module installed. Install kmod or zygisk for full protection.</string>
     <string name="dashboard_issue_lsposed_not_installed">LSPosed/Vector is not installed. Install it and enable the VPN Hide module for System Framework.</string>
     <string name="dashboard_issue_reboot">LSPosed is configured correctly, but its hooks are not active yet. Reboot the device to activate them.</string>

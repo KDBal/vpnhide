@@ -134,21 +134,45 @@ fun DashboardScreen(
             }
         }
 
-        // Issues
-        if (s.issues.isNotEmpty()) {
+        // Issues — split by severity. Errors first (user attention), then
+        // warnings (working-but-suboptimal). Sections hide themselves when
+        // empty so the Dashboard stays short on a healthy setup.
+        val errors = s.issues.filter { it.severity == IssueSeverity.ERROR }
+        val warnings = s.issues.filter { it.severity == IssueSeverity.WARNING }
+
+        if (errors.isNotEmpty()) {
             Spacer(Modifier.height(20.dp))
             Text(
-                text = stringResource(R.string.dashboard_issues, s.issues.size),
+                text = stringResource(R.string.dashboard_issues, errors.size),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.error,
             )
             Spacer(Modifier.height(8.dp))
-            for (issue in s.issues) {
+            for (issue in errors) {
                 StatusBanner(
-                    text = issue,
+                    text = issue.text,
                     containerColor = MaterialTheme.colorScheme.errorContainer,
                     contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                )
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+
+        if (warnings.isNotEmpty()) {
+            Spacer(Modifier.height(20.dp))
+            Text(
+                text = stringResource(R.string.dashboard_warnings, warnings.size),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+            Spacer(Modifier.height(8.dp))
+            for (issue in warnings) {
+                StatusBanner(
+                    text = issue.text,
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                 )
                 Spacer(Modifier.height(6.dp))
             }
