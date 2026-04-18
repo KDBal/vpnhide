@@ -4,7 +4,7 @@
 
 <h1 align="center">VPN Hide</h1>
 
-<p align="center">Hide an active Android VPN connection from selected apps.</p>
+<p align="center">Скрывает активное VPN-соединение на Android от выбранных приложений.</p>
 
 <p align="center">
   <a href="https://github.com/okhsunrog/vpnhide/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/okhsunrog/vpnhide/ci.yml?label=CI" alt="CI"></a>
@@ -13,226 +13,226 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
 </p>
 
-<p align="center"><strong><a href="README.ru.md">Русская версия</a></strong></p>
+<p align="center"><strong><a href="README.en.md">English version</a></strong></p>
 
-## Why vpnhide over alternatives?
+## Чем vpnhide лучше аналогов?
 
-Existing modules like [NoVPNDetect](https://bitbucket.org/yuri-project/novpndetect) and [NoVPNDetect Enhanced](https://github.com/BlueCat300/NoVPNDetectEnhanced) only cover **Java API** detection and hook **inside the target app's process** via Xposed. This has two critical problems:
+Существующие модули, такие как [NoVPNDetect](https://bitbucket.org/yuri-project/novpndetect) и [NoVPNDetect Enhanced](https://github.com/BlueCat300/NoVPNDetectEnhanced), покрывают только **Java API** обнаружение и хукают **внутри процесса** целевого приложения через Xposed. У этого подхода две критические проблемы:
 
-1. **Invisible to anti-tamper** — any app with memory injection checks detects the Xposed hooks and refuses to work. The NoVPNDetect Enhanced author explicitly states: *"The module will not work if the target app has LSPosed protection or memory injection checks. For example, MirPay, T-Bank."*
-2. **No native coverage** — apps using C/C++ code, cross-platform frameworks (Flutter, React Native), or direct syscalls can detect VPN through `ioctl`, `getifaddrs`, netlink sockets, and `/proc/net/*`. These vectors are completely missed by Java-only hooks.
+1. **Обнаружение anti-tamper защитой** — любое приложение с проверкой инъекций в память обнаруживает хуки Xposed и отказывается работать. Автор NoVPNDetect Enhanced прямо пишет: *«Модуль не будет работать если у подключаемого приложения есть защита от LSPosed, проверка на инъекции в память. Например MirPay, Т-Банк.»*
+2. **Нет нативного покрытия** — приложения, использующие C/C++ код, кроссплатформенные фреймворки (Flutter, React Native) или прямые системные вызовы, могут обнаружить VPN через `ioctl`, `getifaddrs`, netlink-сокеты и `/proc/net/*`. Java-хуки эти векторы полностью пропускают.
 
-vpnhide solves both problems with a layered architecture:
+vpnhide решает обе проблемы многослойной архитектурой:
 
-**Layer 1 — Java API (lsposed module):** hooks `system_server`, not the target app. `NetworkCapabilities`, `NetworkInfo`, and `LinkProperties` are filtered at the Binder level *before* data reaches the app's process. The app receives clean data over IPC — no injection into its process, nothing for anti-tamper to detect.
+**Уровень 1 — Java API (модуль lsposed):** хукает `system_server`, а не целевое приложение. `NetworkCapabilities`, `NetworkInfo` и `LinkProperties` фильтруются на уровне Binder *до того*, как данные попадут в процесс приложения. Приложение получает чистые данные через IPC — никаких инъекций в его процесс, нечего обнаруживать.
 
-**Layer 2 — Native (kmod or zygisk):** covers every native detection path:
-- **kmod** (recommended) — kernel-level `kretprobe` hooks. Filters `ioctl` (SIOCGIFFLAGS, SIOCGIFNAME, SIOCGIFCONF), `getifaddrs`/netlink dumps (RTM_GETLINK, RTM_GETADDR), and `/proc/net/*` reads — all before the syscall returns to userspace. Zero in-process footprint. No library injection. Nothing to detect.
-- **zygisk** (alternative) — inline-hooks `libc.so` inside the app process. Same native coverage as kmod but runs in-process, so it's theoretically detectable by advanced anti-tamper. Use this if your kernel isn't supported by kmod.
+**Уровень 2 — нативный (kmod или zygisk):** покрывает все нативные пути обнаружения:
+- **kmod** (рекомендуется) — хуки `kretprobe` на уровне ядра. Фильтрует `ioctl` (SIOCGIFFLAGS, SIOCGIFNAME, SIOCGIFCONF), `getifaddrs`/netlink-дампы (RTM_GETLINK, RTM_GETADDR) и чтение `/proc/net/*` — всё до возврата системного вызова в пользовательское пространство. Нулевой след в процессе. Никаких инъекций библиотек. Нечего обнаруживать.
+- **zygisk** (альтернатива) — inline-хуки `libc.so` внутри процесса приложения. То же нативное покрытие, что и kmod, но работает в процессе, поэтому теоретически обнаружим продвинутой anti-tamper защитой. Используйте, если ваше ядро не поддерживается kmod.
 
-**Layer 3 — Additional app-level controls (integrated into the VPN Hide app):**
-- **Interface hiding** — hide VPN interfaces, routes, and Java API VPN state from selected apps
-- **Port hiding** — block selected apps from reaching `127.0.0.1` / `::1` so they cannot probe locally bound VPN / proxy daemons
-- **App hiding** — hide selected apps from selected observer apps at the PackageManager level
+**Уровень 3 — дополнительные механизмы в самом приложении VPN Hide:**
+- **Скрытие интерфейса** — скрывает VPN-интерфейсы, маршруты и VPN-состояние Java API от выбранных приложений
+- **Скрытие портов** — блокирует выбранным приложениям доступ к `127.0.0.1` / `::1`, чтобы они не могли проверять локально запущенные VPN / proxy-демоны
+- **Скрытие приложений** — скрывает выбранные приложения от выбранных приложений-наблюдателей на уровне PackageManager
 
-The target app's process is completely untouched (with kmod + lsposed) — no Xposed, no inline hooks, no modified memory regions. Because of that, vpnhide works with banking and government apps that actively detect and block Xposed-based modules.
+Процесс целевого приложения полностью нетронут (при использовании kmod + lsposed) — ни Xposed, ни inline-хуков, ни модифицированных регионов памяти. Благодаря этому vpnhide работает с банковскими и государственными приложениями, которые активно обнаруживают и блокируют модули на основе Xposed.
 
-## What vpnhide hides
+## Что именно скрывает vpnhide
 
-vpnhide is not just one toggle. It combines three different protections that can be enabled per app:
+vpnhide — это не один переключатель, а три разных типа защиты, которые можно включать по отдельности для каждого приложения:
 
-1. **Interface hiding** — the core VPN-hiding layer. It removes VPN interfaces and routes from native APIs (`ioctl`, `getifaddrs`, `/proc/net/*`, `NetworkInterface`) and from Java APIs (`NetworkCapabilities`, `NetworkInfo`, `LinkProperties`).
-2. **Port hiding** — blocks localhost access for selected apps so they cannot detect Clash, sing-box, V2Ray, Happ, and similar tools by probing local ports.
-3. **App hiding** — hides selected installed apps from selected observer apps. Useful against package visibility checks, for example when an app tries to determine whether a VPN or proxy client is installed.
+1. **Скрытие интерфейса** — основной слой скрытия VPN. Убирает VPN-интерфейсы и маршруты из нативных API (`ioctl`, `getifaddrs`, `/proc/net/*`, `NetworkInterface`) и из Java API (`NetworkCapabilities`, `NetworkInfo`, `LinkProperties`).
+2. **Скрытие портов** — блокирует доступ к localhost для выбранных приложений, чтобы они не могли обнаружить Clash, sing-box, V2Ray, Happ и подобные инструменты через проверку локальных портов.
+3. **Скрытие приложений** — позволяет скрыть выбранные установленные приложения от выбранных приложений-наблюдателей. Полезно против проверок package visibility, например когда приложение пытается определить, установлен ли на устройстве VPN или proxy-клиент.
 
-## Which modules do I need?
+## Какие модули нужны?
 
-You always need the **VPN Hide app** (`vpnhide.apk`) plus one native module for interface hiding. The app can also use the optional Ports module if you want localhost port blocking:
+Всегда нужно **приложение VPN Hide** (`vpnhide.apk`) плюс один нативный модуль для скрытия интерфейса. Дополнительно приложение может использовать необязательный Ports-модуль для блокировки localhost-портов:
 
-- **`kmod`** (recommended) — fully out-of-process, invisible to anti-tamper. Requires a supported GKI kernel.
-- **`zygisk`** — use this if your kernel isn't supported by kmod.
-- **`portshide`** (optional) — install this if you want to block selected apps from probing localhost ports.
+- **`kmod`** (рекомендуется) — полностью out-of-process, невидим для anti-tamper. Требуется поддерживаемое GKI-ядро.
+- **`zygisk`** — используйте, если ваше ядро не поддерживается kmod.
+- **`portshide`** (необязательно) — установите, если хотите блокировать выбранным приложениям доступ к localhost-портам.
 
-See [Install](#install) for step-by-step instructions.
+См. [Установка](#установка) для пошаговой инструкции.
 
-## Install
+## Установка
 
-Download the latest release from [Releases](https://github.com/okhsunrog/vpnhide/releases).
+Скачайте последний релиз из [Releases](https://github.com/okhsunrog/vpnhide/releases).
 
-### Step 1 — VPN Hide app + LSPosed
+### Шаг 1 — Приложение VPN Hide + LSPosed
 
-1. Install `vpnhide.apk` as a regular app
-2. In LSPosed manager, enable the VPN Hide module and add **"System Framework"** to its scope
-3. Reboot (required — LSPosed hooks are injected into `system_server` at boot, so the module must be active before `system_server` starts)
-4. Open the VPN Hide app and grant it root access (Magisk will prompt automatically; on KernelSU-Next, grant permission manually in the manager)
+1. Установите `vpnhide.apk` как обычное приложение
+2. В менеджере LSPosed включите модуль VPN Hide и добавьте **«System Framework»** в его область действия
+3. Перезагрузите устройство (обязательно — хуки LSPosed внедряются в `system_server` при загрузке, поэтому модуль должен быть активен до запуска `system_server`)
+4. Откройте приложение VPN Hide и предоставьте ему root-доступ (Magisk запросит автоматически; на KernelSU-Next выдайте разрешение вручную в менеджере)
 
-### Step 2 — Native module for interface hiding
+### Шаг 2 — Нативный модуль для скрытия интерфейса
 
-Open the VPN Hide app. The **Dashboard** tab will detect your device and kernel, and tell you exactly which native module to install:
+Откройте приложение VPN Hide. На вкладке **«Обзор»** приложение определит ваше устройство и ядро и покажет, какой именно нативный модуль нужно установить:
 
-- If your kernel is supported, it will recommend a specific kmod file (e.g. `vpnhide-kmod-android14-6.1.zip`)
-- If not, it will recommend the zygisk module (`vpnhide-zygisk.zip`)
+- Если ядро поддерживается — будет рекомендован конкретный файл kmod (например, `vpnhide-kmod-android14-6.1.zip`)
+- Если нет — будет рекомендован модуль zygisk (`vpnhide-zygisk.zip`)
 
-Install the recommended module:
-- **kmod:** via KernelSU-Next manager → Modules → Install from storage
-- **zygisk:** via KernelSU-Next or Magisk manager → Modules
+Установите рекомендованный модуль:
+- **kmod:** через менеджер KernelSU-Next → Модули → Установить из хранилища
+- **zygisk:** через менеджер KernelSU-Next или Magisk → Модули
 
-Reboot after installing the native module.
+Перезагрузите устройство после установки нативного модуля.
 
-### Step 3 — Optional: install the Ports module
+### Шаг 3 — Необязательно: установка Ports-модуля
 
-If you want localhost port blocking, install `vpnhide-ports.zip` via KernelSU-Next or Magisk manager.
+Если вам нужна блокировка localhost-портов, установите `vpnhide-ports.zip` через KernelSU-Next или Magisk manager.
 
-This module is independent from kmod / zygisk and is only needed for the **Ports** mode in the app.
+Этот модуль независим от kmod / zygisk и нужен только для режима **Ports** в приложении.
 
-### Step 4 — Configure protections
+### Шаг 4 — Настройка защит
 
-Open the VPN Hide app → **Protection** tab.
+Откройте приложение VPN Hide → вкладка **«Защита»**.
 
-- **Tun** mode: use the **L** / **K** / **Z** toggles to control interface hiding layers for each app (LSPosed, Kernel module, Zygisk), or tap the row to toggle all layers at once
-- **Apps** mode: choose which apps should be hidden and which apps should act as observers
-- **Ports** mode: choose which apps should be blocked from accessing localhost ports
+- Режим **Tun**: используйте переключатели **L** / **K** / **Z** для управления уровнями скрытия интерфейса для каждого приложения (LSPosed, модуль ядра, Zygisk), или нажмите на строку, чтобы переключить все уровни сразу
+- Режим **Apps**: выберите, какие приложения нужно скрывать и какие приложения должны выступать наблюдателями
+- Режим **Ports**: выберите, каким приложениям нужно запретить доступ к localhost-портам
 
-Tap Save after making changes.
+После изменений нажмите «Сохранить».
 
-After changing targets, force-stop and restart the affected apps — hooks take effect on the next app launch.
+После изменения списка принудительно остановите и перезапустите затронутые приложения — хуки вступают в силу при следующем запуске.
 
-> **Note:** some apps detect Zygisk hooks. For those apps, keep **Z** disabled and rely on kmod + LSPosed.
+> **Примечание:** некоторые приложения обнаруживают хуки Zygisk. Для таких приложений оставьте **Z** выключенным и используйте kmod + LSPosed.
 
 <details>
-<summary><b>Shell configuration (advanced)</b></summary>
+<summary><b>Настройка через командную строку (для продвинутых)</b></summary>
 
-Edit `/data/adb/vpnhide_kmod/targets.txt`, `/data/adb/vpnhide_zygisk/targets.txt`, or `/data/adb/vpnhide_lsposed/targets.txt` directly (one package name per line). Force-stop and restart affected apps for changes to take effect.
+Редактируйте `/data/adb/vpnhide_kmod/targets.txt`, `/data/adb/vpnhide_zygisk/targets.txt` или `/data/adb/vpnhide_lsposed/targets.txt` напрямую (одно имя пакета на строку). Принудительно остановите и перезапустите затронутые приложения для применения изменений.
 
 </details>
 
 <details>
-<summary><b>Manual GKI lookup (if you want to pick the kmod file yourself)</b></summary>
+<summary><b>Ручной подбор GKI (если хотите выбрать файл kmod самостоятельно)</b></summary>
 
-1. On your phone, go to **Settings → About phone** and find the **Kernel version** line. It looks something like `6.1.75-android14-11-g...`
-2. You need two parts from this string: the kernel version (`6.1`) and the android generation (`android14`). Together they form your GKI generation: `android14-6.1`
-3. Download the matching file from the release: `vpnhide-kmod-android14-6.1.zip`
+1. На телефоне откройте **Настройки → О телефоне** и найдите строку **Версия ядра**. Она выглядит примерно так: `6.1.75-android14-11-g...`
+2. Вам нужны две части из этой строки: версия ядра (`6.1`) и поколение android (`android14`). Вместе они образуют ваше поколение GKI: `android14-6.1`
+3. Скачайте соответствующий файл из релиза: `vpnhide-kmod-android14-6.1.zip`
 
-Alternatively, run `adb shell uname -r` to see the kernel version string.
+Также можно выполнить `adb shell uname -r` через ADB, чтобы увидеть строку версии ядра.
 
-> **Important:** `android14` in the kernel string is NOT your Android version — it's the kernel generation. For example, Pixels from 6 to 9a all use the `android14-6.1` kernel regardless of whether they run Android 14 or 15.
+> **Важно:** `android14` в строке ядра — это НЕ версия Android, а поколение ядра. Например, все Pixel с 6 по 9a используют ядро `android14-6.1` вне зависимости от того, стоит ли на них Android 14 или 15.
 
 </details>
 
-## Screenshots
+## Скриншоты
 
-| Dashboard — all OK | Dashboard — issues | Install recommendation |
+| Обзор — всё ОК | Обзор — проблемы | Рекомендация установки |
 |:-:|:-:|:-:|
 | <img src="assets/screenshots/dashboard-all-ok.png" width="250"> | <img src="assets/screenshots/dashboard-issues.jpg" width="250"> | <img src="assets/screenshots/dashboard-install-recommendation.jpg" width="250"> |
 
-| Protection — Tun | App hiding | Ports hiding |
+| Защита — Tun | Скрытие приложений | Скрытие портов |
 |:-:|:-:|:-:|
 | <img src="assets/screenshots/protection-tunnels-list.png" width="250"> | <img src="assets/screenshots/app-hiding-list.png" width="250"> | <img src="assets/screenshots/ports-hiding-list.png" width="250"> |
 
-| App hiding help | Ports hiding help | Diagnostics |
+| Скрытие приложений — помощь | Скрытие портов — помощь | Диагностика |
 |:-:|:-:|:-:|
 | <img src="assets/screenshots/app-hiding-help.png" width="250"> | <img src="assets/screenshots/ports-hiding-help.png" width="250"> | <img src="assets/screenshots/diagnostics-native.jpg" width="250"> |
 
-## Verify
+## Проверка
 
-The app has a built-in diagnostics system that catches most setup problems automatically.
+В приложении есть встроенная система диагностики, которая автоматически обнаруживает большинство проблем с настройкой.
 
-**Dashboard** (runs on every app launch):
-- Module status for all three layers (installed, active, version, target count)
-- LSPosed configuration validation — reads the LSPosed database to verify that VPN Hide is enabled, System Framework is in scope, and no extra apps are scoped (a common misconfiguration)
-- Version mismatch detection — compares installed module versions with the running app version and tells you exactly what to update
-- Native module recommendation — detects your kernel and maps it to the right kmod artifact, or recommends zygisk if unsupported
-- Live protection check (when VPN is active) — runs 16 native checks and 5 Java API checks to verify that VPN is actually hidden
+**Обзор** (запускается при каждом открытии приложения):
+- Статус модулей для всех трёх уровней (установлен, активен, версия, количество целей)
+- Валидация конфигурации LSPosed — читает базу данных LSPosed и проверяет, что VPN Hide включён, System Framework в scope, и нет лишних приложений в scope (частая ошибка при настройке)
+- Обнаружение несоответствия версий — сравнивает версии установленных модулей с версией приложения и подсказывает, что именно нужно обновить
+- Рекомендация нативного модуля — определяет ядро устройства и подбирает нужный файл kmod, или рекомендует zygisk, если ядро не поддерживается
+- Проверка защиты в реальном времени (при активном VPN) — выполняет 16 нативных и 5 Java API проверок, чтобы убедиться, что VPN действительно скрыт
 
-Any issues found are shown as actionable cards with specific instructions.
+Все обнаруженные проблемы показываются в виде карточек с конкретными инструкциями по исправлению.
 
-**Diagnostics** tab — detailed per-check breakdown with individual PASS/FAIL results for all 26 detection vectors. Useful for troubleshooting when the Dashboard shows partial protection.
+**Диагностика** — детальная разбивка по каждой проверке с индивидуальными результатами PASS/FAIL для всех 26 векторов обнаружения. Полезна для отладки, когда «Обзор» показывает частичную защиту.
 
-## Components
+## Компоненты
 
-| Directory | What | How |
+| Директория | Что | Как |
 |---|---|---|
-| **[kmod/](kmod/)** | Kernel module (C) | `kretprobe` hooks in kernel space. Zero footprint in the target app's process. ([details](kmod/README.md)) |
-| **[lsposed/](lsposed/)** | LSPosed module + app (Kotlin + Rust) | Hooks `writeToParcel` in `system_server` for per-UID Binder filtering. The APK provides a dashboard (module status, version checks, LSPosed config validation, install recommendations), Protection modes for interface / port / app hiding, and diagnostics. ([details](lsposed/README.md)) |
-| **[portshide/](portshide/)** | Ports module (Shell + iptables) | Blocks selected apps from reaching `127.0.0.1` / `::1`, hiding locally bound VPN / proxy daemons from localhost port probes. ([details](portshide/README.md)) |
-| **[zygisk/](zygisk/)** | Zygisk module (Rust) | Inline-hooks `libc.so` in the target app's process. Alternative to kmod. ([details](zygisk/README.md)) |
+| **[kmod/](kmod/)** | Модуль ядра (C) | Хуки `kretprobe` в пространстве ядра. Нулевой след в процессе приложения. ([подробнее](kmod/README.md)) |
+| **[lsposed/](lsposed/)** | LSPosed-модуль + приложение (Kotlin + Rust) | Хуки `writeToParcel` в `system_server` для per-UID фильтрации Binder. APK предоставляет обзорную панель (статус модулей, проверка версий, валидация конфигурации LSPosed, рекомендации по установке), режимы защиты для скрытия интерфейса / портов / приложений и диагностику. ([подробнее](lsposed/README.md)) |
+| **[portshide/](portshide/)** | Модуль скрытия портов (Shell + iptables) | Блокирует выбранным приложениям доступ к `127.0.0.1` / `::1`, скрывая локально запущенные VPN / proxy-демоны от проверок localhost-портов. ([подробнее](portshide/README.md)) |
+| **[zygisk/](zygisk/)** | Zygisk-модуль (Rust) | Inline-хуки `libc.so` в процессе приложения. Альтернатива kmod. ([подробнее](zygisk/README.md)) |
 
-## Detection coverage
+## Покрытие обнаружения
 
-| # | Detection vector | SELinux | kmod | zygisk | lsposed |
+| # | Вектор обнаружения | SELinux | kmod | zygisk | lsposed |
 |---|---|---|---|---|---|
-| 1 | `ioctl(SIOCGIFFLAGS)` on tun0 | | x | x | |
-| 2 | `ioctl(SIOCGIFNAME)` resolve index to name | | x | x | |
-| 3 | `ioctl(SIOCGIFMTU)` MTU fingerprinting | | x | x | |
-| 4 | `ioctl(SIOCGIFCONF)` interface enumeration | | x | x | |
-| 5 | All other `SIOCGIF*` (INDEX, HWADDR, ADDR, etc.) | | x | x | |
-| 6 | `getifaddrs()` (uses netlink internally) | | x | x | |
-| 7 | netlink `RTM_GETLINK` dump | blocked | x | x | |
-| 8 | netlink `RTM_GETADDR` dump (IPv4 + IPv6) | blocked | x | | |
-| 9 | netlink `RTM_GETROUTE` dump | blocked | | | |
-| 10 | `/proc/net/route` | blocked | x | x | |
-| 11 | `/proc/net/ipv6_route` | blocked | | x | |
-| 12 | `/proc/net/if_inet6` | blocked | | x | |
-| 13 | `/proc/net/tcp`, `tcp6` | blocked | | | |
-| 14 | `/proc/net/udp`, `udp6` | blocked | | | |
-| 15 | `/proc/net/dev` | blocked | | | |
-| 16 | `/proc/net/fib_trie` | blocked | | | |
-| 17 | `/sys/class/net/tun0/` | blocked | | | |
+| 1 | `ioctl(SIOCGIFFLAGS)` на tun0 | | x | x | |
+| 2 | `ioctl(SIOCGIFNAME)` разрешение индекса в имя | | x | x | |
+| 3 | `ioctl(SIOCGIFMTU)` фингерпринтинг MTU | | x | x | |
+| 4 | `ioctl(SIOCGIFCONF)` перечисление интерфейсов | | x | x | |
+| 5 | Все остальные `SIOCGIF*` (INDEX, HWADDR, ADDR и т.д.) | | x | x | |
+| 6 | `getifaddrs()` (использует netlink внутри) | | x | x | |
+| 7 | netlink `RTM_GETLINK` дамп | блок. | x | x | |
+| 8 | netlink `RTM_GETADDR` дамп (IPv4 + IPv6) | блок. | x | | |
+| 9 | netlink `RTM_GETROUTE` дамп | блок. | | | |
+| 10 | `/proc/net/route` | блок. | x | x | |
+| 11 | `/proc/net/ipv6_route` | блок. | | x | |
+| 12 | `/proc/net/if_inet6` | блок. | | x | |
+| 13 | `/proc/net/tcp`, `tcp6` | блок. | | | |
+| 14 | `/proc/net/udp`, `udp6` | блок. | | | |
+| 15 | `/proc/net/dev` | блок. | | | |
+| 16 | `/proc/net/fib_trie` | блок. | | | |
+| 17 | `/sys/class/net/tun0/` | блок. | | | |
 | 18 | `NetworkCapabilities` (hasTransport, NOT_VPN, transportInfo) | | | | x |
 | 19 | `NetworkInfo` (getType, getTypeName) | | | | x |
 | 20 | `ConnectivityManager.getActiveNetwork()` | | | | x |
-| 21 | `ConnectivityManager.getAllNetworks()` + VPN scan | | | | x |
+| 21 | `ConnectivityManager.getAllNetworks()` + VPN-сканирование | | | | x |
 | 22 | `LinkProperties` (interfaceName) | | | | x |
-| 23 | `LinkProperties` (routes via VPN interfaces) | | | | x |
+| 23 | `LinkProperties` (маршруты через VPN-интерфейсы) | | | | x |
 | 24 | `NetworkInterface.getNetworkInterfaces()` | | x | x | |
-| 25 | `System.getProperty` (proxy settings) | | | x | |
-| 26 | `/proc/net/route` via Java `FileInputStream` | blocked | x | x | |
+| 25 | `System.getProperty` (настройки прокси) | | | x | |
+| 26 | `/proc/net/route` через Java `FileInputStream` | блок. | x | x | |
 
-**blocked** = SELinux denies access for untrusted apps (Android 10+). No hook needed.
+**блок.** = SELinux запрещает доступ для обычных приложений (Android 10+). Хуки не нужны.
 
-Rows 1-6, 21, and 24 are the only vectors reachable by regular apps. Everything else is either blocked by SELinux or goes through Java APIs (covered by lsposed).
+Строки 1–6, 21 и 24 — единственные векторы, доступные обычным приложениям. Всё остальное либо заблокировано SELinux, либо проходит через Java API (покрывается lsposed).
 
-## Building from source
+## Сборка из исходников
 
-- **kmod**: `cd kmod && make && ./build-zip.sh` — see [kmod/BUILDING.md](kmod/BUILDING.md)
+- **kmod**: `cd kmod && make && ./build-zip.sh` — см. [kmod/BUILDING.md](kmod/BUILDING.md)
 - **zygisk**: `cd zygisk && ./build-zip.sh` (Rust + NDK + cargo-ndk)
 - **lsposed**: `cd lsposed && ./gradlew assembleDebug` (JDK 17 + Rust + NDK + cargo-ndk)
 
-## Verified against
+## Проверено на
 
-- [RKNHardering](https://github.com/xtclovver/RKNHardering/) — all detection vectors clean
-- [YourVPNDead](https://github.com/loop-uh/yourvpndead) — all detection vectors clean
+- [RKNHardering](https://github.com/xtclovver/RKNHardering/) — все векторы обнаружения чисты
+- [YourVPNDead](https://github.com/loop-uh/yourvpndead) — все векторы обнаружения чисты
 
-Both implement the official Russian Ministry of Digital Development VPN/proxy detection methodology ([source](https://t.me/ruitunion/893)).
+Оба реализуют официальную методику обнаружения VPN/прокси Минцифры РФ ([источник](https://t.me/ruitunion/893)).
 
-## Split tunneling
+## Раздельное туннелирование (split tunneling)
 
-Works correctly with split-tunnel VPN configurations. Only the apps in the target list are affected.
+Корректно работает с конфигурациями VPN с раздельным туннелированием. Затрагиваются только приложения из списка целей.
 
-Using split tunneling together with VPN Hide is strongly recommended.
+Настоятельно рекомендуется использовать split tunneling в паре с VPN Hide.
 
-Detection apps that compare the device-reported public IP against external checkers should stay outside the tunnel — their traffic should go through the carrier, not the VPN.
+Приложения-детекторы, сравнивающие публичный IP устройства с внешними чекерами, лучше оставлять вне туннеля — их трафик должен выходить через оператора, а не через VPN.
 
-## Threat model
+## Модель угроз
 
-vpnhide hides an active VPN from specific apps. It is NOT designed for:
-- Hiding root or custom ROM presence
-- Bypassing Play Integrity
-- Fooling server-side detection (DNS leakage, IP blocklists, latency/TLS fingerprinting)
+vpnhide скрывает активный VPN от конкретных приложений. Он НЕ предназначен для:
+- Скрытия root или кастомной прошивки
+- Обхода Play Integrity
+- Обмана серверной детекции (утечки DNS, чёрные списки IP, фингерпринтинг латентности/TLS)
 
-## Known limitations
+## Известные ограничения
 
-- `kmod` requires a GKI kernel with `CONFIG_KPROBES=y` (standard on Android 12+ devices)
-- `lsposed` requires LSPosed, LSPosed-Next, or Vector
-- `zygisk` is arm64 only
-- Direct `svc #0` syscalls bypass zygisk's libc hooks — that's what kmod is for
-- Server-side detection is unfixable client-side — use split tunneling
+- `kmod` требует GKI-ядро с `CONFIG_KPROBES=y` (стандарт на устройствах Android 12+)
+- `lsposed` требует LSPosed, LSPosed-Next или Vector
+- `zygisk` — только arm64
+- Прямые системные вызовы `svc #0` обходят хуки libc в zygisk — для этого и нужен kmod
+- Серверная детекция неисправима на стороне клиента — используйте раздельное туннелирование
 
-## License
+## Лицензия
 
-MIT. See [LICENSE](LICENSE).
+MIT. См. [LICENSE](LICENSE).
 
-The kernel module declares `MODULE_LICENSE("GPL")` as required by the Linux kernel to resolve `EXPORT_SYMBOL_GPL` symbols at runtime.
+Модуль ядра объявляет `MODULE_LICENSE("GPL")`, как требуется ядром Linux для разрешения символов `EXPORT_SYMBOL_GPL` во время выполнения.
 
 ## Star History
 
