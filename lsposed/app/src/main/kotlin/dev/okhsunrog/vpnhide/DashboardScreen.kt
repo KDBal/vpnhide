@@ -589,7 +589,11 @@ private fun ChangelogDialog(
     data: ChangelogData,
     onDismiss: () -> Unit,
 ) {
-    val entries = remember(data) { listOf(data.current) + data.history }
+    val entries = remember(data) { data.history }
+    if (entries.isEmpty()) {
+        onDismiss()
+        return
+    }
     var index by remember { mutableIntStateOf(0) }
     val entry = entries[index]
     val locale =

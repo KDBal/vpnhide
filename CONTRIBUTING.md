@@ -31,7 +31,7 @@ Before opening a PR, add a changelog entry:
 # types: added | changed | fixed | removed | deprecated | security
 ```
 
-This appends to the `unreleased` section of `lsposed/app/src/main/assets/changelog.json` and regenerates `CHANGELOG.md` and `update-json/changelog.md`. Commit all three files with your change.
+This writes a new TOML fragment to `changelog.d/` and regenerates `CHANGELOG.md`. Commit the new fragment and the regenerated `CHANGELOG.md` with your change. Two PRs adding entries simultaneously get separate files and don't conflict on merge.
 
 **Skip the entry** for internal refactors with no behaviour change, docs-only, CI-only, and test-only changes.
 

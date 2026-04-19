@@ -1,53 +1,47 @@
 """Shared helpers for changelog manipulation.
 
-Used by `changelog.py` (append entry to unreleased) and `release.py`
-(rotate unreleased into history + bump version files).
+Used by `changelog.py` (create unreleased fragment), `release.py`
+(rotate fragments into history + bump version files) and the
+markdown-generation pipeline.
 
-Source of truth: `lsposed/app/src/main/assets/changelog.json` (bilingual,
-full history).
+Storage layout:
 
-JSON schema:
+* `lsposed/app/src/main/assets/changelog.json` — bilingual release
+  history. Source of truth for everything that's already shipped.
 
-```
-{
-  "unreleased": {
-    "sections": [
-      { "type": "fixed", "items": [{"en": "...", "ru": "..."}] }
-    ]
-  },
-  "history": [
-    { "version": "0.6.1", "sections": [...] },
-    { "version": "0.6.0", "sections": [...] }
-  ]
-}
-```
+      { "history": [ { "version": "0.6.1", "sections": [...] }, ... ] }
 
-`unreleased` holds entries accumulated during development — it is
-always present (possibly empty). `history[0]` is the most recent
-released version.
+* `changelog.d/*.toml` — one TOML file per pending entry. Each file is
+  a single unreleased item:
 
-Two generated markdown artifacts (en only, overwritten on every script
-run — never edited by hand):
+      type = "fixed"
+      en   = "..."
+      ru   = "..."
 
-* `CHANGELOG.md` at the repo root — full history, Keep a Changelog
-  convention with an optional `## [Unreleased]` block on top. The
-  canonical human-facing changelog; CI extracts a single tag's section
-  from here for the GitHub release body.
-* `update-json/changelog.md` — the last MD_RECENT_VERSIONS released
-  versions only (no Unreleased block). Served at a stable URL
-  referenced from module update-json files; Magisk/KSU fetches it and
-  displays it in the update popup.
+  Fragments live on disk and are accumulated across PRs. Because each
+  entry is its own file, two PRs concurrently adding entries don't
+  touch the same bytes and don't conflict. `release.py` rotates all
+  fragments into `history[0]` and deletes them.
+
+Generated (overwritten every script run, never hand-edited):
+
+* `CHANGELOG.md` at the repo root — Keep a Changelog, full history with
+  an optional `## [Unreleased]` block sourced from the fragments.
+* `update-json/changelog.md` — last MD_RECENT_VERSIONS released
+  versions, no Unreleased. Served to Magisk/KSU update popups.
 """
 
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 JSON_PATH = REPO_ROOT / "lsposed/app/src/main/assets/changelog.json"
 FULL_MD_PATH = REPO_ROOT / "CHANGELOG.md"
 SHORT_MD_PATH = REPO_ROOT / "update-json/changelog.md"
+FRAGMENTS_DIR = REPO_ROOT / "changelog.d"
 
 VALID_TYPES = ("added", "changed", "fixed", "removed", "deprecated", "security")
 MD_RECENT_VERSIONS = 5
@@ -73,6 +67,49 @@ def save_json(data: dict) -> None:
     )
 
 
+def load_fragments() -> list[dict]:
+    """Read every `*.toml` under `changelog.d/`, sorted by filename so
+    the rendered order is deterministic (filenames carry a timestamp
+    prefix, so order ≈ chronological).
+    """
+    if not FRAGMENTS_DIR.is_dir():
+        return []
+    fragments: list[dict] = []
+    for path in sorted(FRAGMENTS_DIR.glob("*.toml")):
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        type_ = data.get("type")
+        en_raw = data.get("en")
+        ru_raw = data.get("ru")
+        if type_ not in VALID_TYPES:
+            raise ValueError(f"{path}: type must be one of {VALID_TYPES}, got {type_!r}")
+        if not isinstance(en_raw, str) or not en_raw.strip():
+            raise ValueError(f"{path}: missing or empty 'en'")
+        if not isinstance(ru_raw, str) or not ru_raw.strip():
+            raise ValueError(f"{path}: missing or empty 'ru'")
+        # Triple-quoted TOML strings keep the trailing \n before the
+        # closing """; strip so rendered markdown doesn't grow blank lines.
+        fragments.append({"path": path, "type": type_, "en": en_raw.strip(), "ru": ru_raw.strip()})
+    return fragments
+
+
+def fragments_as_sections(fragments: list[dict]) -> list[dict]:
+    """Group flat fragment list into the same shape used by history
+    entries: `[{"type": T, "items": [{"en", "ru"}, ...]}, ...]`.
+    Empty types are skipped. Order follows VALID_TYPES.
+    """
+    by_type: dict[str, list[dict]] = {}
+    for fragment in fragments:
+        by_type.setdefault(fragment["type"], []).append(
+            {"en": fragment["en"], "ru": fragment["ru"]},
+        )
+    sections: list[dict] = []
+    for type_ in VALID_TYPES:
+        items = by_type.get(type_)
+        if items:
+            sections.append({"type": type_, "items": items})
+    return sections
+
+
 def _section_items(entry: dict) -> list[tuple[str, list[dict]]]:
     """Return [(type, items), ...] for an entry in canonical order,
     skipping types with no items.
@@ -96,14 +133,14 @@ def _render_entry(heading: str, entry: dict, out: list[str]) -> None:
         out.append("")
 
 
-def render_full_md(data: dict) -> str:
-    """Full history (with optional Unreleased block on top), Keep a
-    Changelog header.
+def render_full_md(data: dict, fragments: list[dict]) -> str:
+    """Full history (with optional Unreleased block on top from
+    fragments), Keep a Changelog header.
     """
     out: list[str] = []
-    unreleased = data.get("unreleased", {"sections": []})
-    if _section_items(unreleased):
-        _render_entry("[Unreleased]", unreleased, out)
+    unreleased_sections = fragments_as_sections(fragments)
+    if unreleased_sections:
+        _render_entry("[Unreleased]", {"sections": unreleased_sections}, out)
     for entry in data.get("history", []):
         _render_entry(f"v{entry['version']}", entry, out)
     return _KEEP_A_CHANGELOG_HEADER + "\n".join(out).rstrip() + "\n"
@@ -119,38 +156,26 @@ def render_short_md(data: dict) -> str:
     return "\n".join(out).rstrip() + "\n"
 
 
-def write_md(data: dict) -> None:
-    FULL_MD_PATH.write_text(render_full_md(data), encoding="utf-8")
+def write_md(data: dict, fragments: list[dict]) -> None:
+    FULL_MD_PATH.write_text(render_full_md(data, fragments), encoding="utf-8")
     SHORT_MD_PATH.write_text(render_short_md(data), encoding="utf-8")
 
 
-def append_unreleased(data: dict, type_: str, en: str, ru: str) -> None:
-    """Add an entry to the unreleased section."""
-    if type_ not in VALID_TYPES:
-        raise ValueError(f"invalid type {type_!r}; valid: {', '.join(VALID_TYPES)}")
-    unreleased = data.setdefault("unreleased", {"sections": []})
-    sections = unreleased.setdefault("sections", [])
-    section = next((s for s in sections if s["type"] == type_), None)
-    if section is None:
-        section = {"type": type_, "items": []}
-        sections.append(section)
-    section["items"].append({"en": en, "ru": ru})
-
-
-def rotate_unreleased(data: dict, version: str) -> dict:
-    """Promote `unreleased` into `history[0]` with the given version,
-    then reset `unreleased` to empty. Returns the newly-released entry.
+def rotate_fragments_into_history(
+    data: dict,
+    fragments: list[dict],
+    version: str,
+) -> dict:
+    """Promote the current fragment set into `history[0]` with the given
+    version, then delete the fragment files. Returns the newly-released
+    entry.
     """
-    unreleased = data.get("unreleased", {"sections": []})
     released = {
         "version": version,
-        "sections": unreleased.get("sections", []),
+        "sections": fragments_as_sections(fragments),
     }
     history = data.setdefault("history", [])
     history.insert(0, released)
-    data["unreleased"] = {"sections": []}
+    for fragment in fragments:
+        fragment["path"].unlink()
     return released
-
-
-def unreleased_has_entries(data: dict) -> bool:
-    return bool(_section_items(data.get("unreleased", {"sections": []})))

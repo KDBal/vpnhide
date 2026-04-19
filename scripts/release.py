@@ -41,10 +41,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from changelog_lib import (  # type: ignore[import-not-found]
     REPO_ROOT,
+    load_fragments,
     load_json,
-    rotate_unreleased,
+    rotate_fragments_into_history,
     save_json,
-    unreleased_has_entries,
     write_md,
 )
 from rich.console import Console
@@ -119,10 +119,11 @@ def main() -> int:
             )
             return 1
 
-    if not unreleased_has_entries(data):
+    fragments = load_fragments()
+    if not fragments:
         console.print(
-            "[yellow]warning:[/yellow] unreleased section has no entries — "
-            "releasing an empty changelog.",
+            "[yellow]warning:[/yellow] no changelog fragments under "
+            "changelog.d/ — releasing an empty changelog.",
         )
 
     # Source files must all exist.
@@ -139,11 +140,13 @@ def main() -> int:
             console.print(f"[red]missing:[/red] {f.relative_to(REPO_ROOT)}")
             return 1
 
-    # Changelog: rotate unreleased into history.
-    rotate_unreleased(data, version)
+    # Changelog: rotate fragments into history, then delete them.
+    rotate_fragments_into_history(data, fragments, version)
     save_json(data)
-    write_md(data)
-    console.print(f"  [green]✓[/green] changelog: unreleased → history[0] as v{version}")
+    write_md(data, fragments=[])
+    console.print(
+        f"  [green]✓[/green] changelog: {len(fragments)} fragment(s) → history[0] as v{version}",
+    )
 
     # VERSION file.
     write_version_file(version)

@@ -17,7 +17,6 @@ data class UpdateInfo(
 )
 
 data class ChangelogData(
-    val current: ChangelogEntry,
     val history: List<ChangelogEntry>,
 )
 
@@ -136,12 +135,11 @@ fun loadChangelog(context: Context): ChangelogData? =
                 .bufferedReader()
                 .readText()
         val obj = JSONObject(json)
-        val current = parseChangelogEntry(obj)
         val history =
             obj.optJSONArray("history")?.let { arr ->
                 (0 until arr.length()).map { parseChangelogEntry(arr.getJSONObject(it)) }
             } ?: emptyList()
-        ChangelogData(current = current, history = history)
+        ChangelogData(history = history)
     } catch (e: Exception) {
         VpnHideLog.w(TAG, "Failed to load changelog: ${e.message}")
         null

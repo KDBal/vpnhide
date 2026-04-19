@@ -1,0 +1,6 @@
+# Changelog fragments live one-per-file under changelog.d/ so concurrent
+# PRs don't collide on a shared changelog file. Filenames carry a
+# timestamp prefix so collisions on the actual filename are extremely
+# unlikely — `union` is belt-and-suspenders for the edge case where two
+# PRs somehow pick the exact same name.
+changelog.d/*.toml merge=union
