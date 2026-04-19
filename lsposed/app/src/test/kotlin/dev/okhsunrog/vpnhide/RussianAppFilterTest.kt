@@ -90,6 +90,16 @@ class RussianAppFilterTest {
         assertTrue(isRussianApp("vesnasoft.teleform", "Teleform"))
     }
 
+    @Test
+    fun `batch 2026-04-19 4pda feedback is matched`() {
+        assertTrue(isRussianApp("air.ru.samis.Pribyvalka63", "Прибывалка 63"))
+        assertTrue(isRussianApp("info.goodline.events", "Кавёр"))
+        assertTrue(isRussianApp("com.rosdomofon.rdua", "РосДомофон"))
+        assertTrue(isRussianApp("com.drivee.taxi.rides", "Drivee"))
+        assertTrue(isRussianApp("com.setka", "Сетка"))
+        assertTrue(isRussianApp("com.twinby", "Twinby"))
+    }
+
     // ── Non-Russian apps (must NOT match) ──
 
     @Test
