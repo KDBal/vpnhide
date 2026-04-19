@@ -91,6 +91,10 @@
     <string name="dashboard_not_installed">Not installed</string>
     <string name="dashboard_installed_inactive">Installed, inactive</string>
     <string name="dashboard_installed_restart_app">Installed, restart app to activate</string>
+    <string name="dashboard_kmod_broken_wrong_variant">Installed, wrong GKI variant</string>
+    <string name="dashboard_kmod_broken_unsupported_kernel">Installed, kernel not supported</string>
+    <string name="dashboard_kmod_broken_no_kprobes">Installed, kernel has no kprobes</string>
+    <string name="dashboard_kmod_broken_unknown_variant">Installed, did not load</string>
     <string name="dashboard_active_targets">Active · %d target(s)</string>
     <string name="dashboard_reboot_needed">Reboot needed</string>
     <string name="dashboard_protection">Protection status</string>
@@ -135,6 +139,17 @@
     <string name="dashboard_issue_update_app_for_ports">Ports module version %1$s is newer than app version %2$s. Update the VPN Hide app.</string>
     <string name="dashboard_issue_ports_version_mismatch">Ports module version mismatch: module %1$s, app %2$s. Open KernelSU/Magisk → Modules to update the module.</string>
     <string name="dashboard_running_version">Running module version: %s</string>
+
+    <!-- kmod variant / load diagnostics -->
+    <string name="dashboard_issue_kmod_wrong_variant">Wrong kernel module variant: installed %1$s, your kernel needs %2$s. Uninstall the current kmod and install %3$s from the latest release.</string>
+    <string name="dashboard_issue_kmod_unknown_variant">Kernel module is installed but not loading, and the zip doesn\'t identify which GKI variant it was built for. Reinstall %1$s from the latest release to make sure it matches your kernel.</string>
+    <string name="dashboard_issue_kmod_load_failed">Kernel module failed to load. insmod error: %1$s. See Diagnostics → Kmod load trace for details.</string>
+    <string name="dashboard_issue_kmod_not_supported_kernel">Your kernel (%1$s) has no matching vpnhide-kmod variant. Uninstall the kmod module and install %2$s instead.</string>
+    <string name="dashboard_issue_kprobes_missing">Your kernel was built without CONFIG_KRETPROBES. The VPN Hide kernel module cannot work on this kernel. Uninstall kmod and use vpnhide-zygisk.zip instead.</string>
+
+    <!-- Diagnostics: kmod load trace -->
+    <string name="diag_kmod_load_trace_title">Kmod load trace</string>
+    <string name="diag_kmod_load_trace_description">Captured by the kernel module\'s post-fs-data.sh on the last boot. Share this block if you have module loading issues.</string>
 
     <!-- Update -->
     <string name="update_available_title">Update available</string>

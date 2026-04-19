@@ -93,7 +93,27 @@ fun DiagnosticsScreen(
     var summary by remember { mutableStateOf<String?>(null) }
     var exporting by remember { mutableStateOf(false) }
     var debugZipFile by remember { mutableStateOf<File?>(null) }
+    var kmodTrace by remember { mutableStateOf<String?>(null) }
     val summaryFmt = stringResource(R.string.summary_format)
+
+    LaunchedEffect(Unit) {
+        kmodTrace =
+            withContext(Dispatchers.IO) {
+                val (exit, raw) = suExec("cat $KMOD_LOAD_STATUS_FILE 2>/dev/null")
+                if (exit != 0 || raw.isBlank()) return@withContext null
+                val (_, bootId) = suExec("cat /proc/sys/kernel/random/boot_id 2>/dev/null")
+                val (_, dmesg) = suExec("cat $KMOD_LOAD_DMESG_FILE 2>/dev/null")
+                buildString {
+                    append(raw.trimEnd())
+                    append("\ncurrent_boot_id=")
+                    append(bootId.trim())
+                    if (dmesg.isNotBlank()) {
+                        append("\n--- load_dmesg ---\n")
+                        append(dmesg.trimEnd())
+                    }
+                }
+            }
+    }
 
     val saveLauncher =
         rememberLauncherForActivityResult(
@@ -197,6 +217,11 @@ fun DiagnosticsScreen(
                     CheckCard(check)
                 }
             }
+        }
+
+        kmodTrace?.let { trace ->
+            Spacer(Modifier.height(16.dp))
+            KmodLoadTraceCard(trace)
         }
 
         Spacer(Modifier.height(16.dp))
@@ -326,6 +351,37 @@ private fun DebugLoggingCard() {
                         setDebugLoggingEnabled(context, newValue)
                     }
                 },
+            )
+        }
+    }
+}
+
+@Composable
+private fun KmodLoadTraceCard(trace: String) {
+    Card(
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = stringResource(R.string.diag_kmod_load_trace_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.diag_kmod_load_trace_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = trace,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f),
             )
         }
     }
@@ -997,6 +1053,18 @@ private suspend fun exportDebugZip(
                     appendLine("=== Kernel module (kmod) ===")
                     val (_, kmodProp) = suExec("cat /data/adb/modules/vpnhide_kmod/module.prop 2>/dev/null")
                     appendLine(kmodProp.ifEmpty { "Not installed" })
+                    appendLine()
+                    appendLine("=== kmod load_status (boot-time diagnostics) ===")
+                    val (_, loadStatus) = suExec("cat $KMOD_LOAD_STATUS_FILE 2>/dev/null")
+                    appendLine(loadStatus.ifEmpty { "(not available — module never ran post-fs-data.sh this boot)" })
+                    appendLine()
+                    appendLine("=== Current boot_id ===")
+                    val (_, curBootId) = suExec("cat /proc/sys/kernel/random/boot_id 2>/dev/null")
+                    appendLine(curBootId.trim().ifEmpty { "(not available)" })
+                    appendLine()
+                    appendLine("=== kmod load_dmesg ===")
+                    val (_, loadDmesg) = suExec("cat $KMOD_LOAD_DMESG_FILE 2>/dev/null")
+                    appendLine(loadDmesg.ifEmpty { "(not captured)" })
                     appendLine()
                     appendLine("=== Zygisk module ===")
                     val (_, zygiskProp) = suExec("cat /data/adb/modules/vpnhide_zygisk/module.prop 2>/dev/null")

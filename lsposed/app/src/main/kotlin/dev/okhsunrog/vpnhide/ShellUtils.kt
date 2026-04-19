@@ -20,6 +20,8 @@ internal const val PORTS_OBSERVERS_FILE = "/data/adb/vpnhide_ports/observers.txt
 internal const val PORTS_APPLY_SCRIPT = "/data/adb/modules/vpnhide_ports/vpnhide_ports_apply.sh"
 internal const val PORTS_MODULE_DIR = "/data/adb/modules/vpnhide_ports"
 internal const val KMOD_MODULE_DIR = "/data/adb/modules/vpnhide_kmod"
+internal const val KMOD_LOAD_STATUS_FILE = "/data/adb/vpnhide_kmod/load_status"
+internal const val KMOD_LOAD_DMESG_FILE = "/data/adb/vpnhide_kmod/load_dmesg"
 internal const val ZYGISK_MODULE_DIR = "/data/adb/modules/vpnhide_zygisk"
 internal const val ZYGISK_STATUS_FILE_NAME = "vpnhide_zygisk_active"
 

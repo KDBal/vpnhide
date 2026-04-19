@@ -219,21 +219,44 @@ private fun ModuleCard(
 
         is ModuleState.Installed -> {
             val active = state.active
+            val broken = state.brokenReason
+            val brokenSubtitleRes =
+                when (broken) {
+                    KmodBrokenReason.WrongVariant -> R.string.dashboard_kmod_broken_wrong_variant
+                    KmodBrokenReason.UnsupportedKernel -> R.string.dashboard_kmod_broken_unsupported_kernel
+                    KmodBrokenReason.MissingKprobes -> R.string.dashboard_kmod_broken_no_kprobes
+                    KmodBrokenReason.UnknownVariantInactive -> R.string.dashboard_kmod_broken_unknown_variant
+                    null -> null
+                }
             ModuleCardShell(
                 name = name,
                 version = state.version,
                 subtitle =
                     when {
+                        brokenSubtitleRes != null -> stringResource(brokenSubtitleRes)
                         active -> stringResource(R.string.dashboard_active_targets, state.targetCount)
                         selfNeedsRestart -> stringResource(R.string.dashboard_installed_restart_app)
                         else -> stringResource(R.string.dashboard_installed_inactive)
                     },
-                dotColor = if (active) Color(0xFF4CAF50) else Color(0xFFFF9800),
+                dotColor =
+                    when {
+                        broken != null -> Color(0xFFB71C1C)
+                        active -> Color(0xFF4CAF50)
+                        else -> Color(0xFFFF9800)
+                    },
                 containerColor =
-                    if (active) {
-                        if (darkTheme) Color(0xFF1B5E20).copy(alpha = 0.3f) else Color(0xFFE8F5E9)
-                    } else {
-                        if (darkTheme) Color(0xFFE65100).copy(alpha = 0.2f) else Color(0xFFFFF3E0)
+                    when {
+                        broken != null -> {
+                            if (darkTheme) Color(0xFFB71C1C).copy(alpha = 0.3f) else Color(0xFFFFEBEE)
+                        }
+
+                        active -> {
+                            if (darkTheme) Color(0xFF1B5E20).copy(alpha = 0.3f) else Color(0xFFE8F5E9)
+                        }
+
+                        else -> {
+                            if (darkTheme) Color(0xFFE65100).copy(alpha = 0.2f) else Color(0xFFFFF3E0)
+                        }
                     },
             )
         }

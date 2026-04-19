@@ -17,7 +17,21 @@ sealed interface ModuleState {
         val version: String?,
         val active: Boolean,
         val targetCount: Int,
+        // Only populated for kmod builds that carry the stamped `gkiVariant=` field
+        // in module.prop (CI-built zips from v0.6.3+). Older builds report null.
+        val gkiVariant: String? = null,
+        // Non-null when the module is installed but the installation itself
+        // is permanently broken (distinct from "active=false" which usually
+        // just means a reboot is pending). UI colors the card red.
+        val brokenReason: KmodBrokenReason? = null,
     ) : ModuleState
+}
+
+enum class KmodBrokenReason {
+    WrongVariant,
+    UnsupportedKernel,
+    MissingKprobes,
+    UnknownVariantInactive,
 }
 
 sealed interface LsposedState {
@@ -136,6 +150,7 @@ internal data class DashboardState(
     val lsposed: LsposedState,
     val ports: ModuleState,
     val nativeInstallRecommendation: NativeInstallRecommendation?,
+    val kmodLoadStatus: KmodLoadStatus?,
     val protection: ProtectionCheck,
     val issues: List<Issue>,
 )
@@ -145,7 +160,28 @@ internal data class NativeInstallRecommendation(
     val kernelVersion: String,
     val kernelBranch: String?,
     val recommendedArtifact: String,
+    val recommendedGkiVariant: String?,
     val preferKmod: Boolean,
+)
+
+// Boot-time diagnostics written by kmod/module/post-fs-data.sh into
+// /data/adb/vpnhide_kmod/load_status. Stays valid across reboots,
+// so bootId is compared against the current boot to know if the
+// record is fresh.
+internal data class KmodLoadStatus(
+    val timestamp: Long?,
+    val bootId: String?,
+    val unameR: String?,
+    val gkiVariant: String?,
+    val kmodVersion: String?,
+    val rootManager: String?,
+    val kprobes: String?,
+    val kretprobes: String?,
+    val insmodExit: Int?,
+    val loaded: Boolean,
+    val insmodStderr: String?,
+    val dmesgTail: String?,
+    val freshForCurrentBoot: Boolean,
 )
 
 private const val TAG = "VpnHide-Dashboard"
@@ -175,16 +211,46 @@ internal fun loadDashboardState(
     // checks — sees a plain semver string. APK versionName has no `v`
     // (Android convention); stamping `v` into module.prop follows the
     // Magisk convention but mixes badly when both show side by side.
-    fun parseModuleProp(dir: String): Pair<Boolean, String?> {
+    data class ModulePropInfo(
+        val installed: Boolean,
+        val version: String?,
+        val gkiVariant: String?,
+    )
+
+    // Older CI-built zips (between commit 3fc7355 "don't dirty committed
+    // module.prop when injecting updateJson" and the gkiVariant stamping)
+    // didn't stamp `gkiVariant=` but their injected updateJson URL already
+    // encodes the KMI: `.../update-kmod-<kmi>.json`. Recover the variant
+    // from there so wrong-variant detection works for existing installs
+    // without requiring a reinstall.
+    val updateJsonKmiRegex = Regex("""update-kmod-([^/]+)\.json""")
+
+    fun parseModuleProp(dir: String): ModulePropInfo {
         val (exitCode, out) = suExec("cat $dir/module.prop 2>/dev/null")
-        if (exitCode != 0 || out.isBlank()) return false to null
-        val version =
-            out
-                .lines()
-                .firstOrNull { it.startsWith("version=") }
-                ?.removePrefix("version=")
-                ?.let(::normalizeVersion)
-        return true to version
+        if (exitCode != 0 || out.isBlank()) return ModulePropInfo(false, null, null)
+        var version: String? = null
+        var gkiVariant: String? = null
+        var updateJsonKmi: String? = null
+        for (line in out.lines()) {
+            when {
+                line.startsWith("version=") -> {
+                    version = normalizeVersion(line.removePrefix("version="))
+                }
+
+                line.startsWith("gkiVariant=") -> {
+                    gkiVariant = line.removePrefix("gkiVariant=").trim().ifBlank { null }
+                }
+
+                line.startsWith("updateJson=") -> {
+                    updateJsonKmi =
+                        updateJsonKmiRegex
+                            .find(line.removePrefix("updateJson="))
+                            ?.groupValues
+                            ?.get(1)
+                }
+            }
+        }
+        return ModulePropInfo(true, version, gkiVariant ?: updateJsonKmi)
     }
 
     fun countTargets(path: String): Int {
@@ -275,24 +341,30 @@ internal fun loadDashboardState(
         val kernelSeries = parseKernelSeries(kernelVersion)
         val kernelBranch = parseKernelAndroidBranch(kernelVersion)
         val artifactKeyVersion = kernelBranch ?: androidMajorVersionLabel()
-        val supportedArtifact =
+
+        data class KmiMatch(
+            val kmi: String,
+            val zip: String,
+        )
+        val supported =
             when (artifactKeyVersion to kernelSeries) {
-                "Android 12" to "5.10" -> "vpnhide-kmod-android12-5.10.zip"
-                "Android 13" to "5.10" -> "vpnhide-kmod-android13-5.10.zip"
-                "Android 13" to "5.15" -> "vpnhide-kmod-android13-5.15.zip"
-                "Android 14" to "5.15" -> "vpnhide-kmod-android14-5.15.zip"
-                "Android 14" to "6.1" -> "vpnhide-kmod-android14-6.1.zip"
-                "Android 15" to "6.6" -> "vpnhide-kmod-android15-6.6.zip"
-                "Android 16" to "6.12" -> "vpnhide-kmod-android16-6.12.zip"
+                "Android 12" to "5.10" -> KmiMatch("android12-5.10", "vpnhide-kmod-android12-5.10.zip")
+                "Android 13" to "5.10" -> KmiMatch("android13-5.10", "vpnhide-kmod-android13-5.10.zip")
+                "Android 13" to "5.15" -> KmiMatch("android13-5.15", "vpnhide-kmod-android13-5.15.zip")
+                "Android 14" to "5.15" -> KmiMatch("android14-5.15", "vpnhide-kmod-android14-5.15.zip")
+                "Android 14" to "6.1" -> KmiMatch("android14-6.1", "vpnhide-kmod-android14-6.1.zip")
+                "Android 15" to "6.6" -> KmiMatch("android15-6.6", "vpnhide-kmod-android15-6.6.zip")
+                "Android 16" to "6.12" -> KmiMatch("android16-6.12", "vpnhide-kmod-android16-6.12.zip")
                 else -> null
             }
 
-        return if (supportedArtifact != null) {
+        return if (supported != null) {
             NativeInstallRecommendation(
                 androidVersion = artifactKeyVersion,
                 kernelVersion = kernelVersion,
                 kernelBranch = kernelBranch,
-                recommendedArtifact = supportedArtifact,
+                recommendedArtifact = supported.zip,
+                recommendedGkiVariant = supported.kmi,
                 preferKmod = true,
             )
         } else {
@@ -301,9 +373,35 @@ internal fun loadDashboardState(
                 kernelVersion = kernelVersion,
                 kernelBranch = kernelBranch,
                 recommendedArtifact = "vpnhide-zygisk.zip",
+                recommendedGkiVariant = null,
                 preferKmod = false,
             )
         }
+    }
+
+    fun readKmodLoadStatus(currentBootId: String): KmodLoadStatus? {
+        val (exit, raw) = suExec("cat $KMOD_LOAD_STATUS_FILE 2>/dev/null")
+        if (exit != 0 || raw.isBlank()) return null
+        val props = parseProps(raw)
+        // load_dmesg is a separate file because its content spans many
+        // lines and the key=value format can't carry them.
+        val (_, dmesgRaw) = suExec("cat $KMOD_LOAD_DMESG_FILE 2>/dev/null")
+        val bootId = props["boot_id"]?.trim()
+        return KmodLoadStatus(
+            timestamp = props["timestamp"]?.trim()?.toLongOrNull(),
+            bootId = bootId,
+            unameR = props["uname_r"]?.trim(),
+            gkiVariant = props["gki_variant"]?.trim()?.ifBlank { null },
+            kmodVersion = props["kmod_version"]?.trim()?.ifBlank { null },
+            rootManager = props["root_manager"]?.trim()?.ifBlank { null },
+            kprobes = props["kprobes"]?.trim()?.ifBlank { null },
+            kretprobes = props["kretprobes"]?.trim()?.ifBlank { null },
+            insmodExit = props["insmod_exit"]?.trim()?.toIntOrNull(),
+            loaded = props["loaded"]?.trim() == "1",
+            insmodStderr = props["insmod_stderr"]?.trim()?.ifBlank { null },
+            dmesgTail = dmesgRaw.trim().ifBlank { null },
+            freshForCurrentBoot = bootId != null && bootId == currentBootId,
+        )
     }
 
     fun resolveScopeEntryLabel(entry: String): String {
@@ -441,20 +539,29 @@ internal fun loadDashboardState(
     }
 
     // kmod
-    val (kmodInstalled, kmodVersion) = parseModuleProp(KMOD_MODULE_DIR)
+    val kmodProp = parseModuleProp(KMOD_MODULE_DIR)
     val (_, procExists) = suExec("[ -f $PROC_TARGETS ] && echo 1 || echo 0")
-    val kmodActive = kmodInstalled && procExists.trim() == "1"
-    val kmodTargetCount = if (kmodInstalled) countTargets(KMOD_TARGETS) else 0
-    val kmod: ModuleState =
-        if (kmodInstalled) {
-            ModuleState.Installed(kmodVersion, kmodActive, kmodTargetCount)
+    val kmodActive = kmodProp.installed && procExists.trim() == "1"
+    val kmodTargetCount = if (kmodProp.installed) countTargets(KMOD_TARGETS) else 0
+    // Built without brokenReason — populated below after kernelRecommendation
+    // and kmodLoadStatus are ready.
+    val kmodRaw: ModuleState =
+        if (kmodProp.installed) {
+            ModuleState.Installed(
+                version = kmodProp.version,
+                active = kmodActive,
+                targetCount = kmodTargetCount,
+                gkiVariant = kmodProp.gkiVariant,
+            )
         } else {
             ModuleState.NotInstalled
         }
-    VpnHideLog.i(TAG, "kmod: $kmod")
+    VpnHideLog.i(TAG, "kmodRaw: $kmodRaw")
 
     // zygisk
-    val (zygiskInstalled, zygiskVersion) = parseModuleProp(ZYGISK_MODULE_DIR)
+    val zygiskProp = parseModuleProp(ZYGISK_MODULE_DIR)
+    val zygiskInstalled = zygiskProp.installed
+    val zygiskVersion = zygiskProp.version
     val zygiskStatusFile = File(context.filesDir, ZYGISK_STATUS_FILE_NAME)
     val zygiskStatusRaw =
         try {
@@ -477,30 +584,87 @@ internal fun loadDashboardState(
     VpnHideLog.i(TAG, "zygisk: $zygisk (heartbeatBootId=$zygiskBootId currentBootId=${currentBootId.trim()})")
 
     // ports (iptables-based loopback blocker)
-    val (portsInstalled, portsVersion) = parseModuleProp(PORTS_MODULE_DIR)
+    val portsProp = parseModuleProp(PORTS_MODULE_DIR)
     val portsObserverCount =
-        if (portsInstalled) countTargets(PORTS_OBSERVERS_FILE) else 0
+        if (portsProp.installed) countTargets(PORTS_OBSERVERS_FILE) else 0
     val (_, portsChainExists) = suExec("iptables -L vpnhide_out -n 2>/dev/null >/dev/null && echo 1 || echo 0")
-    val portsActive = portsInstalled && portsChainExists.trim() == "1"
+    val portsActive = portsProp.installed && portsChainExists.trim() == "1"
     val ports: ModuleState =
-        if (portsInstalled) {
-            ModuleState.Installed(portsVersion, portsActive, portsObserverCount)
+        if (portsProp.installed) {
+            ModuleState.Installed(portsProp.version, portsActive, portsObserverCount)
         } else {
             ModuleState.NotInstalled
         }
     VpnHideLog.i(TAG, "ports: $ports")
 
-    // Recommendation based purely on the kernel — used both by the install
-    // card (only shown when nothing's installed) and by the "kmod-capable
-    // kernel, only zygisk installed" warning (fires even after install).
+    // Recommendation based purely on the kernel — used by the install card,
+    // the "kmod-capable kernel, only zygisk installed" warning (W1), and the
+    // wrong-variant detection below.
     val kernelRecommendation = buildNativeInstallRecommendation()
-    val nativeInstallRecommendation =
-        if (kmod is ModuleState.NotInstalled && zygisk is ModuleState.NotInstalled) {
-            kernelRecommendation
-        } else {
-            null
+    val kmodLoadStatus = readKmodLoadStatus(currentBootId.trim())
+    VpnHideLog.i(TAG, "kmodLoadStatus=$kmodLoadStatus")
+
+    // Decide whether to surface the install-recommendation card.
+    // Show when:
+    //  - neither native module installed (classic first-install flow), or
+    //  - kmod installed but its stamped gkiVariant doesn't match what the
+    //    device needs (wrong zip — user needs to reinstall the correct one), or
+    //  - kmod installed without gkiVariant (old build) AND not loaded —
+    //    variant unknown + broken is almost always a variant mismatch, or
+    //  - kmod installed on a kernel with no matching vpnhide-kmod variant at
+    //    all (non-GKI / unsupported combo) — we recommend zygisk instead so
+    //    the user doesn't wait for the kmod to "just work".
+    val recommendedKmi = kernelRecommendation?.recommendedGkiVariant
+    val kmodVariantMismatch =
+        kmodRaw is ModuleState.Installed &&
+            kernelRecommendation?.preferKmod == true &&
+            recommendedKmi != null &&
+            kmodRaw.gkiVariant != null &&
+            kmodRaw.gkiVariant != recommendedKmi
+    val kmodUnknownVariantBroken =
+        kmodRaw is ModuleState.Installed &&
+            !kmodRaw.active &&
+            kmodRaw.gkiVariant == null &&
+            kernelRecommendation?.preferKmod == true
+    val kmodOnUnsupportedKernel =
+        kmodRaw is ModuleState.Installed &&
+            kernelRecommendation != null &&
+            !kernelRecommendation.preferKmod
+    val kprobesMissing =
+        kmodLoadStatus?.freshForCurrentBoot == true && kmodLoadStatus.kretprobes == "n"
+    // Priority matches the Error emission below so the card color agrees with
+    // the banner: kprobes-missing first, then unsupported-kernel, then wrong-
+    // variant, then unknown-variant-inactive.
+    val kmodBrokenReason: KmodBrokenReason? =
+        when {
+            kmodRaw !is ModuleState.Installed -> null
+            kprobesMissing -> KmodBrokenReason.MissingKprobes
+            kmodOnUnsupportedKernel -> KmodBrokenReason.UnsupportedKernel
+            kmodVariantMismatch -> KmodBrokenReason.WrongVariant
+            kmodUnknownVariantBroken -> KmodBrokenReason.UnknownVariantInactive
+            else -> null
         }
-    VpnHideLog.i(TAG, "nativeInstallRecommendation=$nativeInstallRecommendation kernelRec=$kernelRecommendation")
+    val kmod: ModuleState =
+        if (kmodRaw is ModuleState.Installed && kmodBrokenReason != null) {
+            kmodRaw.copy(brokenReason = kmodBrokenReason)
+        } else {
+            kmodRaw
+        }
+    VpnHideLog.i(TAG, "kmod (with brokenReason): $kmod")
+    // Only surface the blue "what to install" card when nothing is
+    // installed yet. Wrong-variant / broken / unsupported-kernel cases
+    // already emit a red error below with the same CTA — showing both
+    // duplicates the instruction.
+    val nativeInstallRecommendation =
+        kernelRecommendation?.takeIf {
+            kmod is ModuleState.NotInstalled && zygisk is ModuleState.NotInstalled
+        }
+    VpnHideLog.i(
+        TAG,
+        "nativeInstallRecommendation=$nativeInstallRecommendation " +
+            "(raw=$kernelRecommendation variantMismatch=$kmodVariantMismatch " +
+            "unknownVariantBroken=$kmodUnknownVariantBroken)",
+    )
 
     // lsposed hook status
     val (_, hookStatusRaw) = suExec("cat ${HookEntry.HOOK_STATUS_FILE} 2>/dev/null || true")
@@ -647,8 +811,8 @@ internal fun loadDashboardState(
     // ── Warnings: suboptimal-but-working setups ──
 
     // W1: kernel supports kmod, but user only installed zygisk. Zygisk is
-    // in-process and theoretically detectable by anti-tamper; kmod is strictly
-    // less fingerprinted when available.
+    // detected by banking / payment apps, so a user has to remember Z-off
+    // per such app; kmod is invisible to anti-tamper.
     if (kernelRecommendation?.preferKmod == true &&
         zygisk is ModuleState.Installed &&
         kmod is ModuleState.NotInstalled
@@ -661,9 +825,8 @@ internal fun loadDashboardState(
         )
     }
 
-    // W2: kmod and zygisk both active simultaneously — redundant native hooks,
-    // larger fingerprint surface for anti-tamper SDKs (more hooked libc
-    // entrypoints in /proc/self/maps). Zygisk is meant as a fallback only.
+    // W2: kmod and zygisk both active simultaneously — same coverage,
+    // but Zygisk adds the per-app footgun for banking / payment targets.
     if (kmod is ModuleState.Installed &&
         kmod.active &&
         zygisk is ModuleState.Installed &&
@@ -674,8 +837,8 @@ internal fun loadDashboardState(
 
     // W3: user has debug logging turned on — VPN Hide is writing verbose lines
     // to logcat that a forensic reader with root can see. The flag file is
-    // written by the Diagnostics → Debug logging toggle (separate PR); absent
-    // file ⇒ default off ⇒ no warning.
+    // written by the Diagnostics → Debug logging toggle; absent file ⇒
+    // default off ⇒ no warning.
     val (debugEnabledExit, debugEnabledRaw) = suExec("cat /data/system/vpnhide_debug_logging 2>/dev/null")
     if (debugEnabledExit == 0 && debugEnabledRaw.trim() == "1") {
         warn(res.getString(R.string.dashboard_issue_debug_logging_on))
@@ -687,6 +850,65 @@ internal fun loadDashboardState(
     val (_, getenforce) = suExec("getenforce 2>/dev/null")
     if (getenforce.trim().equals("Permissive", ignoreCase = true)) {
         warn(res.getString(R.string.dashboard_issue_selinux_permissive))
+    }
+
+    // ── Errors: kmod variant / load problems ──
+    // Priority ordered: kprobes-missing first (no variant will ever work),
+    // then "kernel has no kmod variant" (user picked the wrong tool),
+    // then wrong-variant (concrete mismatch we can name), then unknown-variant
+    // (old build that didn't stamp gkiVariant), then generic load failure
+    // when we have insmod stderr to show. Only one kmod-failure issue fires
+    // to avoid piling up related banners. All Errors — these mean kmod is
+    // actively broken, not just suboptimal.
+    val recommendedArtifact = kernelRecommendation?.recommendedArtifact
+    if (kmod is ModuleState.Installed) {
+        when {
+            kmodLoadStatus?.freshForCurrentBoot == true &&
+                kmodLoadStatus.kretprobes == "n" -> {
+                err(res.getString(R.string.dashboard_issue_kprobes_missing))
+            }
+
+            kmodOnUnsupportedKernel && recommendedArtifact != null -> {
+                err(
+                    res.getString(
+                        R.string.dashboard_issue_kmod_not_supported_kernel,
+                        kmodLoadStatus?.unameR ?: "?",
+                        recommendedArtifact,
+                    ),
+                )
+            }
+
+            kmodVariantMismatch -> {
+                err(
+                    res.getString(
+                        R.string.dashboard_issue_kmod_wrong_variant,
+                        (kmod as ModuleState.Installed).gkiVariant ?: "?",
+                        recommendedKmi ?: "?",
+                        recommendedArtifact ?: "?",
+                    ),
+                )
+            }
+
+            kmodUnknownVariantBroken && recommendedArtifact != null -> {
+                err(
+                    res.getString(
+                        R.string.dashboard_issue_kmod_unknown_variant,
+                        recommendedArtifact,
+                    ),
+                )
+            }
+
+            !kmod.active &&
+                kmodLoadStatus?.freshForCurrentBoot == true &&
+                kmodLoadStatus.insmodStderr != null -> {
+                err(
+                    res.getString(
+                        R.string.dashboard_issue_kmod_load_failed,
+                        kmodLoadStatus.insmodStderr,
+                    ),
+                )
+            }
+        }
     }
 
     // ── Protection checks ──
@@ -733,6 +955,7 @@ internal fun loadDashboardState(
         lsposed = lsposed,
         ports = ports,
         nativeInstallRecommendation = nativeInstallRecommendation,
+        kmodLoadStatus = kmodLoadStatus,
         protection = protection,
         issues = issues,
     )

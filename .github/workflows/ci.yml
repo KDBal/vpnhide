@@ -92,9 +92,10 @@ jobs:
           apt-get update -qq && apt-get install -y -qq zip git >/dev/null
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           BUILD_VERSION=$(./scripts/build-version.sh)
-          echo "Stamping kmod module.prop version=v${BUILD_VERSION}"
+          echo "Stamping kmod module.prop version=v${BUILD_VERSION} gkiVariant=${{ matrix.kmi }}"
           cp kmod/vpnhide_kmod.ko kmod/module/
           sed -i "s|^version=.*|version=v${BUILD_VERSION}|" kmod/module/module.prop
+          echo "gkiVariant=${{ matrix.kmi }}" >> kmod/module/module.prop
           echo "updateJson=https://raw.githubusercontent.com/okhsunrog/vpnhide/main/update-json/update-kmod-${{ matrix.kmi }}.json" >> kmod/module/module.prop
           (cd kmod/module && zip -qr "$GITHUB_WORKSPACE/vpnhide-kmod-${{ matrix.kmi }}.zip" .)
 
