@@ -157,6 +157,10 @@ fun AppPickerScreen(
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
                                 Text(
+                                    text = stringResource(R.string.apps_hint_restart_target),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
                                     text = stringResource(R.string.apps_hint_zygisk),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
