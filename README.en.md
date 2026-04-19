@@ -63,7 +63,7 @@ Download the latest release from [Releases](https://github.com/okhsunrog/vpnhide
 
 1. Install `vpnhide.apk` as a regular app
 2. In LSPosed manager, enable the VPN Hide module and add **"System Framework"** to its scope
-3. Reboot (required — LSPosed hooks are injected into `system_server` at boot, so the module must be active before `system_server` starts)
+3. Reboot the device (required — LSPosed hooks are injected into `system_server` at boot, so the module must be active before `system_server` starts)
 4. Open the VPN Hide app and grant it root access (Magisk will prompt automatically; on KernelSU-Next, grant permission manually in the manager)
 
 ### Step 2 — Native module for interface hiding
@@ -77,7 +77,7 @@ Install the recommended module:
 - **kmod:** via KernelSU-Next manager → Modules → Install from storage
 - **zygisk:** via KernelSU-Next or Magisk manager → Modules
 
-Reboot after installing the native module.
+Reboot the device after installing the native module.
 
 ### Step 3 — Optional: install the Ports module
 

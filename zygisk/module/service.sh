@@ -34,10 +34,14 @@ if [ ! -f "$LSPOSED_TARGETS" ] && [ -f "$ZYGISK_TARGETS" ]; then
     log -t vpnhide "migrated zygisk targets to lsposed targets"
 fi
 
-# Get all packages with UIDs in one call
-ALL_PACKAGES="$(pm list packages -U 2>/dev/null)"
+# Get all packages with UIDs across every profile in one call.
+# `--user all` emits comma-separated UIDs per package for apps present
+# in multiple profiles (e.g. work profile) so each profile's copy ends
+# up in vpnhide_uids.txt.
+ALL_PACKAGES="$(pm list packages -U --user all 2>/dev/null)"
 
-# resolve_uids <targets_file> — prints resolved UIDs to stdout
+# resolve_uids <targets_file> — prints one UID per line to stdout,
+# splitting comma-separated UIDs so every profile gets its own entry.
 resolve_uids() {
     local targets_file="$1"
     [ -f "$targets_file" ] || return
@@ -46,10 +50,11 @@ resolve_uids() {
         pkg="$(echo "$line" | tr -d '[:space:]')"
         [ -z "$pkg" ] && continue
         case "$pkg" in \#*) continue ;; esac
-        uid="$(echo "$ALL_PACKAGES" | grep "^package:${pkg} " | sed 's/.*uid://')"
-        if [ -n "$uid" ]; then
-            if [ -z "$uids" ]; then uids="$uid"; else uids="${uids}
-${uid}"; fi
+        uid_csv="$(echo "$ALL_PACKAGES" | grep "^package:${pkg} " | sed 's/.*uid://')"
+        if [ -n "$uid_csv" ]; then
+            expanded="$(echo "$uid_csv" | tr ',' '\n')"
+            if [ -z "$uids" ]; then uids="$expanded"; else uids="${uids}
+${expanded}"; fi
         else
             log -t vpnhide "package not found: $pkg"
         fi

@@ -107,7 +107,7 @@ internal object TargetsCache {
         echo "$SENTINEL PORTS_OBSERVERS"
         cat $PORTS_OBSERVERS_FILE 2>/dev/null || true
         echo "$SENTINEL PM_LIST"
-        pm list packages -U 2>/dev/null || true
+        pm list packages -U --user all 2>/dev/null || true
         echo "$END"
         """.trimIndent()
 
@@ -157,14 +157,19 @@ internal object TargetsCache {
         val portsInstalled = sections["PORTS_MODULE_PROP"]?.isNotBlank() == true
         val observerUids = nonEmptyLines(sections["OBSERVER_UIDS"]).mapNotNull { it.toIntOrNull() }.toSet()
 
-        val pmLine = Regex("^package:(\\S+) uid:(\\d+)")
-        val uidToPkg =
-            sections["PM_LIST"]
-                ?.lines()
-                ?.mapNotNull { line ->
-                    val m = pmLine.find(line) ?: return@mapNotNull null
-                    m.groupValues[2].toInt() to m.groupValues[1]
-                }?.toMap() ?: emptyMap()
+        // With `--user all`, multi-profile packages report comma-separated
+        // UIDs: `package:com.android.chrome uid:10187,1010187`. Each UID
+        // becomes its own entry in the reverse map so observer lookups
+        // from any profile resolve back to the same package name.
+        val pmLine = Regex("^package:(\\S+) uid:(\\S+)")
+        val uidToPkg = mutableMapOf<Int, String>()
+        sections["PM_LIST"]?.lines()?.forEach { line ->
+            val m = pmLine.find(line) ?: return@forEach
+            val pkg = m.groupValues[1]
+            for (id in m.groupValues[2].split(',')) {
+                id.toIntOrNull()?.let { uidToPkg[it] = pkg }
+            }
+        }
 
         return TargetsSnapshot(
             kmodModuleInstalled = sections["KMOD_MODULE_DIR"]?.trim() == "1",

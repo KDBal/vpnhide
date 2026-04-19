@@ -77,7 +77,7 @@
     <string name="badge_info">INFO</string>
     <string name="banner_no_vpn">No active VPN detected. Turn on your VPN connection before running checks.</string>
     <string name="banner_ready">VPN is active. This app is in the target list. Results below.</string>
-    <string name="banner_added_self">Added this app to the target list. Restart the app for native-level checks to take effect.</string>
+    <string name="banner_added_self">Added VPN Hide to the target list. Restart VPN Hide (force-stop and reopen) for native-level checks to take effect — no device reboot needed.</string>
     <string name="banner_adding_self">Adding this app to target list&#8230;</string>
     <string name="banner_network_blocked">Network access is disabled for this app. ioctl checks (SIOCGIFFLAGS, SIOCGIFMTU, SIOCGIFCONF) cannot run without it. Enable in Settings → Apps → VPN Hide → Mobile data &amp; Wi-Fi.</string>
     <string name="section_native">Native level (kmod / zygisk)</string>
@@ -91,13 +91,13 @@
     <string name="dashboard_ports">Ports hiding module</string>
     <string name="dashboard_not_installed">Not installed</string>
     <string name="dashboard_installed_inactive">Installed, inactive</string>
-    <string name="dashboard_installed_restart_app">Installed, restart app to activate</string>
+    <string name="dashboard_installed_restart_app">Installed, restart VPN Hide to activate</string>
     <string name="dashboard_kmod_broken_wrong_variant">Installed, wrong GKI variant</string>
     <string name="dashboard_kmod_broken_unsupported_kernel">Installed, kernel not supported</string>
     <string name="dashboard_kmod_broken_no_kprobes">Installed, kernel has no kprobes</string>
     <string name="dashboard_kmod_broken_unknown_variant">Installed, did not load</string>
     <string name="dashboard_active_targets">Active · %d target(s)</string>
-    <string name="dashboard_reboot_needed">Reboot needed</string>
+    <string name="dashboard_reboot_needed">Device reboot needed</string>
     <string name="dashboard_protection">Protection status</string>
     <string name="dashboard_native_protection">Native level</string>
     <string name="dashboard_java_protection">Java API level</string>
@@ -107,9 +107,9 @@
     <string name="dashboard_protection_unknown">Not checked</string>
     <string name="dashboard_protection_no_module">No module</string>
     <string name="dashboard_protection_hooks_inactive">Hooks inactive</string>
-    <string name="dashboard_needs_restart">App was just added to targets. Restart the app to check protection.</string>
+    <string name="dashboard_needs_restart">VPN Hide was just added to its own target list. Restart VPN Hide (force-stop and reopen) to check protection — no device reboot needed.</string>
     <string name="dashboard_no_vpn">No active VPN. Turn on VPN to check protection status.</string>
-    <string name="vpn_off_prompt">No active VPN. Turn it on, then tap Retry to run the protection checks. Results are cached for the rest of this app session — no need to re-run later.</string>
+    <string name="vpn_off_prompt">No active VPN. Turn it on, then tap Retry to run the protection checks. Results are cached until VPN Hide is restarted — no need to re-run later in the same session.</string>
     <string name="vpn_off_retry">Retry</string>
     <string name="dashboard_install_recommendation_title">Installation recommendation</string>
     <string name="dashboard_install_recommendation_device">Your device: %1$s, kernel %2$s</string>
@@ -122,6 +122,7 @@
     <string name="dashboard_issue_both_native_active">Kernel module and Zygisk are both active, covering the same native paths. Kmod is invisible to anti-tamper, Zygisk isn\'t — so every time you add a banking or payment app as a target, you have to remember to leave Z off for it. Uninstall the Zygisk module to remove that per-app footgun; kmod keeps the coverage.</string>
     <string name="dashboard_issue_debug_logging_on">Debug logging is enabled. VPN Hide is writing verbose lines to logcat that anyone with root can read. Turn it off in Diagnostics after you\'ve finished collecting a bug report.</string>
     <string name="dashboard_issue_selinux_permissive">SELinux is Permissive. Six detection vectors VPN Hide relies on the kernel to block (RTM_GETROUTE, /proc/net/{tcp,udp,dev,fib_trie}, /sys/class/net) are reachable to target apps. Run `setenforce 1` and investigate what disabled it.</string>
+    <string name="dashboard_issue_self_multi_profile">VPN Hide is installed in %1$d profiles. Manage targets only from the main profile and uninstall the app from your work profile / Second Space / other secondary profiles. Each instance writes to the same target files but its app picker only sees apps from its own profile, so a Save from the wrong profile silently drops targets it can\'t see.</string>
     <string name="dashboard_issue_no_native">No native module installed. Install kmod or zygisk for full protection.</string>
     <string name="dashboard_issue_lsposed_not_installed">LSPosed/Vector is not installed. Install it and enable the VPN Hide module for System Framework.</string>
     <string name="dashboard_issue_reboot">LSPosed is configured correctly, but its hooks are not active yet. Reboot the device to activate them.</string>
@@ -131,7 +132,7 @@
     <string name="dashboard_issue_lsposed_extra_scope">VPN Hide should stay scoped only to System Framework in LSPosed/Vector. Remove these apps from the VPN Hide scope: %1$s. Use Protection → Tun in VPN Hide for filtering instead.</string>
     <string name="dashboard_issue_no_targets">No target apps configured. Go to Protection → Tun to select apps.</string>
     <string name="dashboard_issue_ports_no_observers">Ports hiding module is installed but no observers are configured. Go to Protection → Ports to pick apps.</string>
-    <string name="dashboard_issue_version_mismatch">LSPosed module version mismatch: running %1$s, installed %2$s. Reboot to apply the update.</string>
+    <string name="dashboard_issue_version_mismatch">LSPosed module version mismatch: running %1$s, installed %2$s. Reboot the device to apply the update.</string>
     <string name="dashboard_issue_update_kmod">Kernel module version %1$s is older than app version %2$s. Open KernelSU/Magisk → Modules to update.</string>
     <string name="dashboard_issue_update_zygisk">Zygisk version %1$s is older than app version %2$s. Open KernelSU/Magisk → Modules to update.</string>
     <string name="dashboard_issue_update_app_for_kmod">Kernel module version %1$s is newer than app version %2$s. Update the VPN Hide app.</string>

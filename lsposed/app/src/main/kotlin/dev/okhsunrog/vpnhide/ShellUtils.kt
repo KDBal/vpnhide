@@ -148,20 +148,28 @@ internal fun ensureSelfInTargets(selfPkg: String): Boolean {
         // immediately via inotify — no app restart is needed, unlike native (zygisk) hooks.
     }
 
-    // Resolve UIDs so hooks pick us up immediately (kmod + lsposed support live reload)
+    // Resolve UIDs so hooks pick us up immediately (kmod + lsposed support live reload).
+    // `--user all` catches the case where vpnhide is installed in a work profile too —
+    // each UID gets added to targets so both instances are covered. `tr ',' '\n'`
+    // expands comma-separated UIDs, then we iterate one per line and dedup against
+    // the existing file content.
     val uidCmd =
         buildString {
-            append("ALL_PKGS=\"\$(pm list packages -U 2>/dev/null)\"")
-            append("; SELF_UID=\$(echo \"\$ALL_PKGS\" | grep '^package:$selfPkg ' | sed 's/.*uid://')")
-            append("; if [ -f $PROC_TARGETS ] && [ -n \"\$SELF_UID\" ]; then")
-            append("   EXISTING=\$(cat $PROC_TARGETS 2>/dev/null)")
-            append(";  echo \"\$EXISTING\" | grep -q \"^\$SELF_UID\$\" || echo \"\$SELF_UID\" >> $PROC_TARGETS")
-            append("; fi")
-            append("; if [ -n \"\$SELF_UID\" ]; then")
-            append("   EXISTING2=\$(cat $SS_UIDS_FILE 2>/dev/null)")
+            append("ALL_PKGS=\"\$(pm list packages -U --user all 2>/dev/null)\"")
             append(
-                ";  echo \"\$EXISTING2\" | grep -q \"^\$SELF_UID\$\" || { echo \"\$SELF_UID\" >> $SS_UIDS_FILE; chmod 644 $SS_UIDS_FILE; chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null; }",
+                "; SELF_UIDS=\$(echo \"\$ALL_PKGS\" | grep '^package:$selfPkg ' | sed 's/.*uid://' | tr ',' '\\n')",
             )
+            append("; if [ -n \"\$SELF_UIDS\" ]; then")
+            append("   for U in \$SELF_UIDS; do")
+            append("     if [ -f $PROC_TARGETS ]; then")
+            append("       EXISTING=\$(cat $PROC_TARGETS 2>/dev/null)")
+            append(";      echo \"\$EXISTING\" | grep -q \"^\$U\$\" || echo \"\$U\" >> $PROC_TARGETS")
+            append("     ; fi")
+            append("   ; EXISTING2=\$(cat $SS_UIDS_FILE 2>/dev/null)")
+            append(
+                "   ; echo \"\$EXISTING2\" | grep -q \"^\$U\$\" || { echo \"\$U\" >> $SS_UIDS_FILE; chmod 644 $SS_UIDS_FILE; chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null; }",
+            )
+            append("   ; done")
             append("; fi")
         }
     suExec(uidCmd)

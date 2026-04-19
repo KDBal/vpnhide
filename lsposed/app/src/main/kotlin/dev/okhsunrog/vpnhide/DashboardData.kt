@@ -852,6 +852,26 @@ internal fun loadDashboardState(
         warn(res.getString(R.string.dashboard_issue_selinux_permissive))
     }
 
+    // W5: VPN Hide installed in more than one user profile (work profile,
+    // MIUI Second Space, etc.). Each instance can write to the shared
+    // target files, but each one's app picker only sees apps from its own
+    // profile (PackageManager.getInstalledApplications is per-user). A
+    // Save from a profile that doesn't see all the targets would silently
+    // drop them. Recommend uninstalling everywhere except the main profile.
+    val (_, selfPmRaw) =
+        suExec("pm list packages -U --user all 2>/dev/null | grep '^package:$selfPkg '")
+    val selfUidCount =
+        selfPmRaw
+            .lines()
+            .firstOrNull { it.startsWith("package:$selfPkg ") }
+            ?.substringAfter("uid:", "")
+            ?.split(',')
+            ?.count { it.trim().toIntOrNull() != null }
+            ?: 0
+    if (selfUidCount > 1) {
+        warn(res.getString(R.string.dashboard_issue_self_multi_profile, selfUidCount))
+    }
+
     // ── Errors: kmod variant / load problems ──
     // Priority ordered: kprobes-missing first (no variant will ever work),
     // then "kernel has no kmod variant" (user picked the wrong tool),

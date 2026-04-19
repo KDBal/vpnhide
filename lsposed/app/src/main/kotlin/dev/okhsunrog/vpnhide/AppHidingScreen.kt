@@ -392,10 +392,14 @@ private fun buildHidingUidResolver(
     outputFile: String,
 ): String =
     buildString {
-        append("ALL_PKGS=\"\$(pm list packages -U 2>/dev/null)\"")
+        // `--user all` emits comma-separated UIDs for multi-profile
+        // packages (e.g. work profile). `tr ',' '\n'` splits them so
+        // each profile's observer gets matched by the system_server
+        // hook, not just the primary-user one.
+        append("ALL_PKGS=\"\$(pm list packages -U --user all 2>/dev/null)\"")
         append("; UIDS=\"\"")
         for (pkg in packages) {
-            append("; U=\$(echo \"\$ALL_PKGS\" | grep '^package:$pkg ' | sed 's/.*uid://')")
+            append("; U=\$(echo \"\$ALL_PKGS\" | grep '^package:$pkg ' | sed 's/.*uid://' | tr ',' '\\n')")
             append("; if [ -n \"\$U\" ]; then if [ -z \"\$UIDS\" ]; then UIDS=\"\$U\"; else UIDS=\"\$UIDS")
             append("\n")
             append("\$U\"; fi; fi")

@@ -37,7 +37,11 @@ if [ "$pm_ready" != 1 ]; then
     exit 1
 fi
 
-ALL_PACKAGES="$(pm list packages -U 2>/dev/null)"
+# `--user all` emits comma-separated UIDs per package for apps present
+# in multiple profiles, e.g.
+#   package:com.android.chrome uid:10187,1010187
+# so work-profile / secondary-user installs get blocked too.
+ALL_PACKAGES="$(pm list packages -U --user all 2>/dev/null)"
 
 # Read pkg names from observers.txt, resolve to UIDs, build newline-
 # separated UID list. Skip comments, blanks, unknown packages.
@@ -49,15 +53,27 @@ if [ -f "$OBSERVERS_FILE" ]; then
         case "$pkg" in \#*) continue ;; esac
         # Exact match on $1 — grep would treat pkg dots as regex wildcards
         # and could mis-resolve e.g. "com.x.y" to "comXxXy" if such a package
-        # existed. awk compares fields literally.
-        uid="$(echo "$ALL_PACKAGES" | awk -v p="package:${pkg}" '$1 == p { sub(/uid:/, "", $2); print $2; exit }')"
-        [ -z "$uid" ] && continue
-        case "$uid" in *[!0-9]*) continue ;; esac
-        # System UID guard — don't let user accidentally block localhost
-        # for installd / system_server / bluetooth / etc.
-        [ "$uid" -lt 10000 ] && continue
-        if [ -z "$UIDS" ]; then UIDS="$uid"; else UIDS="${UIDS}
+        # existed. awk compares fields literally. `split($2, ids, ",")`
+        # handles the comma-separated UID list emitted by `--user all`.
+        uid_list="$(echo "$ALL_PACKAGES" | awk -v p="package:${pkg}" '
+            $1 == p {
+                sub(/uid:/, "", $2)
+                n = split($2, ids, ",")
+                for (i = 1; i <= n; i++) print ids[i]
+                exit
+            }')"
+        [ -z "$uid_list" ] && continue
+        # Unquoted `$uid_list` splits on IFS (whitespace incl. newlines)
+        # so each UID from a multi-profile package becomes its own iteration.
+        for uid in $uid_list; do
+            case "$uid" in *[!0-9]*) continue ;; esac
+            # System UID guard — don't let user accidentally block localhost
+            # for installd / system_server / bluetooth / etc. Note that
+            # profile UIDs like 1010187 are well above this threshold.
+            [ "$uid" -lt 10000 ] && continue
+            if [ -z "$UIDS" ]; then UIDS="$uid"; else UIDS="${UIDS}
 ${uid}"; fi
+        done
     done < "$OBSERVERS_FILE"
 fi
 

@@ -386,10 +386,15 @@ private fun buildUidResolver(
     outputFile: String,
 ): String =
     buildString {
-        append("ALL_PKGS=\"\$(pm list packages -U 2>/dev/null)\"")
+        // `--user all` produces comma-separated UIDs for packages that
+        // exist in multiple profiles (e.g. work profile), like:
+        //   package:com.android.chrome uid:10187,1010187
+        // `tr ',' '\n'` expands each to its own line so every profile's
+        // copy of the target is individually filtered by the hooks.
+        append("ALL_PKGS=\"\$(pm list packages -U --user all 2>/dev/null)\"")
         append("; UIDS=\"\"")
         for (pkg in packages) {
-            append("; U=\$(echo \"\$ALL_PKGS\" | grep '^package:$pkg ' | sed 's/.*uid://')")
+            append("; U=\$(echo \"\$ALL_PKGS\" | grep '^package:$pkg ' | sed 's/.*uid://' | tr ',' '\\n')")
             append("; if [ -n \"\$U\" ]; then if [ -z \"\$UIDS\" ]; then UIDS=\"\$U\"; else UIDS=\"\$UIDS")
             append("\n")
             append("\$U\"; fi; fi")
