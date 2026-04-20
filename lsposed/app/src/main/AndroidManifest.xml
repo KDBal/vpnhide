@@ -10,7 +10,7 @@
     <application
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
-        android:theme="@style/Theme.Material3.DayNight.NoActionBar"
+        android:theme="@style/Theme.VpnHide.Splash"
         android:allowBackup="false"
         tools:ignore="GoogleAppIndexingWarning">
 

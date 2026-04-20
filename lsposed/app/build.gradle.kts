@@ -60,7 +60,8 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -109,8 +110,8 @@ dependencies {
     // Xposed API — compileOnly so it's not bundled into the APK.
     compileOnly("de.robv.android.xposed:api:82")
 
-    // XML theme for splash screen (DayNight support)
-    implementation("com.google.android.material:material:1.12.0")
+    // Android 12 SplashScreen API, backported to API 23+.
+    implementation("androidx.core:core-splashscreen:1.0.1")
 
     // Compose UI
     implementation(libs.core.ktx)
