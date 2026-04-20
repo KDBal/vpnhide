@@ -30,11 +30,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Lowercase repository name
+        id: lower
+        run: |
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "repo=$REPO" >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .github/docker/ci
           push: true
-          tags: ghcr.io/${{ github.repository }}/ci:latest
+          tags: ghcr.io/${{ steps.lower.outputs.repo }}/ci:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
