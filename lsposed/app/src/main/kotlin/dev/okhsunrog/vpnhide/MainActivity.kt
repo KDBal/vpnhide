@@ -24,26 +24,29 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : ComponentActivity() {
+    private val splashReady = AtomicBoolean(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen().setKeepOnScreenCondition { !splashReady.get() }
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         // Load the user's debug-logging preference before anything else
         // runs so the first suExec + Dashboard reload honor it.
         VpnHideLog.init(applicationContext)
-        setContent { VpnHideApp() }
+        setContent { VpnHideApp(onReady = { splashReady.set(true) }) }
     }
 }
 
 private sealed class RootState {
-    data object Checking : RootState()
-
     data object Granted : RootState()
 
     data object Denied : RootState()
@@ -56,7 +59,7 @@ private fun checkRootAccess(): Boolean {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VpnHideApp() {
+fun VpnHideApp(onReady: () -> Unit = {}) {
     val darkTheme = isSystemInDarkTheme()
     val colorScheme =
         if (android.os.Build.VERSION.SDK_INT >= 31) {
@@ -67,7 +70,7 @@ fun VpnHideApp() {
         }
 
     MaterialTheme(colorScheme = colorScheme) {
-        var rootState by remember { mutableStateOf<RootState>(RootState.Checking) }
+        var rootState by remember { mutableStateOf<RootState?>(null) }
 
         LaunchedEffect(Unit) {
             rootState =
@@ -77,9 +80,20 @@ fun VpnHideApp() {
         }
 
         when (rootState) {
-            RootState.Checking -> RootCheckingScreen()
-            RootState.Denied -> RootDeniedScreen()
-            RootState.Granted -> MainScreen()
+            // splash holds until root check completes
+            null -> {
+                Unit
+            }
+
+            RootState.Denied -> {
+                // Drop splash — RootDeniedScreen has no async prerequisites.
+                LaunchedEffect(Unit) { onReady() }
+                RootDeniedScreen()
+            }
+
+            RootState.Granted -> {
+                MainScreen(onReady = onReady)
+            }
         }
     }
 }
@@ -93,7 +107,7 @@ private data class RefreshContext(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MainScreen() {
+private fun MainScreen(onReady: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var currentTab by remember { mutableStateOf(Tab.Dashboard) }
@@ -106,6 +120,7 @@ private fun MainScreen() {
     val appListLoading by AppListCache.loading.collectAsState()
     val targetsLoading by TargetsCache.loading.collectAsState()
     val dashboardLoading by DashboardCache.loading.collectAsState()
+    val dashboardState by DashboardCache.state.collectAsState()
     val refreshRestart = selfNeedsRestart ?: false
 
     LaunchedEffect(Unit) {
@@ -124,15 +139,24 @@ private fun MainScreen() {
         TargetsCache.ensureLoaded(scope, context)
     }
 
-    // Pre-warm the Diagnostics cache once we know we're not in the
-    // selfNeedsRestart "just-added-myself, hooks not in this process
-    // yet" state. By the time the user switches to the Diagnostics
-    // tab, runAllChecks has already produced Ready — no spinner on
-    // first open of the tab.
+    // Pre-warm Dashboard (needed for first frame) and Diagnostics (needed
+    // when user switches to Diagnostics tab) as soon as selfNeedsRestart
+    // is resolved. Dashboard prewarm here — not in DashboardScreen's own
+    // LaunchedEffect — so it runs while the splash is still held, not
+    // only after MainScreen has rendered.
     LaunchedEffect(selfNeedsRestart) {
-        if (selfNeedsRestart == false) {
-            DiagnosticsCache.run(scope, context)
-        }
+        val r = selfNeedsRestart ?: return@LaunchedEffect
+        DashboardCache.ensureLoaded(scope, context, r)
+        if (!r) DiagnosticsCache.run(scope, context)
+    }
+
+    // Hold the splash screen until the first Dashboard frame can render
+    // with real content. Without this, the user sees splash → brief
+    // selfNeedsRestart-null spinner → brief Dashboard state-null spinner
+    // → content, with each spinner swap being visible flicker.
+    val uiReady = selfNeedsRestart != null && dashboardState != null
+    LaunchedEffect(uiReady) {
+        if (uiReady) onReady()
     }
 
     // Kick the update check once (silently) on first launch, and again
@@ -362,40 +386,6 @@ private fun MainScreen() {
                         modifier = Modifier.padding(innerPadding),
                     )
                 }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun RootCheckingScreen() {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.app_name)) },
-                colors =
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ),
-            )
-        },
-    ) { innerPadding ->
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator()
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.root_checking),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
             }
         }
     }
