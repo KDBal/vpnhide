@@ -3,8 +3,8 @@ package dev.okhsunrog.vpnhide
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
-import android.os.Process
 import android.graphics.drawable.Drawable
+import android.os.Process
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -122,7 +122,8 @@ internal object AppListCache {
         val (exitCode, raw) = suExec("pm list packages -U --user all 2>/dev/null")
         if (exitCode != 0) return emptyMap()
         val out = LinkedHashMap<String, List<Int>>()
-        raw.lineSequence()
+        raw
+            .lineSequence()
             .map { it.trim() }
             .filter { it.startsWith("package:") }
             .forEach { line ->
@@ -133,12 +134,14 @@ internal object AppListCache {
                     out[pkg] = emptyList()
                     return@forEach
                 }
-                val userIds = uidPart
-                    .split(',')
-                    .mapNotNull { it.trim().toIntOrNull() }
-                    .map { it / 100000 }
-                    .distinct()
-                    .sorted()
+
+                val userIds =
+                    uidPart
+                        .split(',')
+                        .mapNotNull { it.trim().toIntOrNull() }
+                        .map { it / 100000 }
+                        .distinct()
+                        .sorted()
                 out[pkg] = userIds
             }
         return out
@@ -157,12 +160,12 @@ internal object AppListCache {
             .toList()
     }
 
-
     private fun loadAllUserApkPathsViaRoot(): Map<String, String> {
         val (exitCode, raw) = suExec("pm list packages -f --user all 2>/dev/null")
         if (exitCode != 0) return emptyMap()
         val out = LinkedHashMap<String, String>()
-        raw.lineSequence()
+        raw
+            .lineSequence()
             .map { it.trim() }
             .filter { it.startsWith("package:") }
             .forEach { line ->
@@ -178,9 +181,11 @@ internal object AppListCache {
         return out
     }
 
-
     @Suppress("DEPRECATION")
-    private fun loadArchiveApplicationInfo(pm: PackageManager, apkPath: String?): ApplicationInfo? {
+    private fun loadArchiveApplicationInfo(
+        pm: PackageManager,
+        apkPath: String?,
+    ): ApplicationInfo? {
         if (apkPath.isNullOrBlank()) return null
         val pkgInfo = runCatching { pm.getPackageArchiveInfo(apkPath, 0) }.getOrNull() ?: return null
         val appinfo = pkgInfo.applicationInfo ?: return null
