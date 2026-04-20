@@ -100,6 +100,17 @@ class RussianAppFilterTest {
         assertTrue(isRussianApp("com.twinby", "Twinby"))
     }
 
+    @Test
+    fun `batch 2026-04-20 brands are matched`() {
+        assertTrue(isRussianApp("com.swiftsoft.anixartd", "Anixart"))
+        assertTrue(isRussianApp("bz.epn.cashback.epncashback", "ePN Cashback"))
+        assertTrue(isRussianApp("gpm.tnt_premier", "ТНТ Premier"))
+        assertTrue(isRussianApp("com.cardsmobile.swoo", "Swoo"))
+        assertTrue(isRussianApp("today.maxi.mobile", "Макси"))
+        assertTrue(isRussianApp("com.dartit.RTcabinet", "Ростелеком Личный кабинет"))
+        assertTrue(isRussianApp("com.warefly.checkscan", "Проверка чеков ФНС"))
+    }
+
     // ── Non-Russian apps (must NOT match) ──
 
     @Test
