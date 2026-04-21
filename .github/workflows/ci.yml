@@ -12,10 +12,21 @@ permissions:
   packages: read
 
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.img.outputs.image }}
+    steps:
+      - id: img
+        env:
+          REPO: ${{ github.repository }}
+        run: echo "image=ghcr.io/${REPO,,}/ci:latest" >> "$GITHUB_OUTPUT"
+
   lint:
+    needs: setup
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/${{ github.repository }}/ci:latest
+      image: ${{ needs.setup.outputs.image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -107,9 +118,10 @@ jobs:
           if-no-files-found: error
 
   zygisk:
+    needs: setup
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/${{ github.repository }}/ci:latest
+      image: ${{ needs.setup.outputs.image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -148,9 +160,10 @@ jobs:
           if-no-files-found: error
 
   lsposed:
+    needs: setup
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/${{ github.repository }}/ci:latest
+      image: ${{ needs.setup.outputs.image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

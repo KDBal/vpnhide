@@ -30,11 +30,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - id: img
+        env:
+          REPO: ${{ github.repository }}
+        run: echo "image=ghcr.io/${REPO,,}/ci:latest" >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .github/docker/ci
           push: true
-          tags: ghcr.io/${{ github.repository }}/ci:latest
+          tags: ${{ steps.img.outputs.image }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
