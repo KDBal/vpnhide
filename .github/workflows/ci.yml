@@ -15,20 +15,18 @@ jobs:
   setup:
     runs-on: ubuntu-latest
     outputs:
-      image_name: ${{ steps.meta.outputs.tags }}
+      image: ${{ steps.img.outputs.image }}
     steps:
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/${{ github.repository }}/ci
-          tags: type=raw,value=latest
+      - id: img
+        env:
+          REPO: ${{ github.repository }}
+        run: echo "image=ghcr.io/${REPO,,}/ci:latest" >> "$GITHUB_OUTPUT"
 
   lint:
     needs: setup
     runs-on: ubuntu-latest
     container:
-      image: ${{ needs.setup.outputs.image_name }}
+      image: ${{ needs.setup.outputs.image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -123,7 +121,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     container:
-      image: ${{ needs.setup.outputs.image_name }}
+      image: ${{ needs.setup.outputs.image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -165,7 +163,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     container:
-      image: ${{ needs.setup.outputs.image_name }}
+      image: ${{ needs.setup.outputs.image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
