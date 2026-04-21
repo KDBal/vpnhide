@@ -66,6 +66,7 @@ fun AppPickerScreen(
     val scope = rememberCoroutineScope()
 
     val cachedApps by AppListCache.apps.collectAsState()
+    val userNames by AppListCache.userNames.collectAsState()
     val targets by TargetsCache.snapshot.collectAsState()
 
     var allApps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
@@ -173,6 +174,7 @@ fun AppPickerScreen(
                     items(filteredApps, key = { it.packageName }) { app ->
                         AppRow(
                             app = app,
+                            userNames = userNames,
                             installed = installed,
                             onToggle = { layer ->
                                 allApps =
@@ -412,6 +414,7 @@ private fun buildUidResolver(
 @Composable
 private fun AppRow(
     app: AppEntry,
+    userNames: Map<Int, String>,
     installed: InstalledModules,
     onToggle: (Layer) -> Unit,
     onToggleAll: () -> Unit,
@@ -434,7 +437,7 @@ private fun AppRow(
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = labelWithUsers(app.label, app.userIds),
+                text = labelWithUsers(app.label, app.userIds, userNames),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
             )

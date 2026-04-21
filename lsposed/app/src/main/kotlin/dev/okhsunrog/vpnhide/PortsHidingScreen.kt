@@ -82,6 +82,7 @@ fun PortsHidingScreen(
     val scope = rememberCoroutineScope()
 
     val cachedApps by AppListCache.apps.collectAsState()
+    val userNames by AppListCache.userNames.collectAsState()
     val targets by TargetsCache.snapshot.collectAsState()
 
     var allApps by remember { mutableStateOf<List<PortsEntry>>(emptyList()) }
@@ -181,6 +182,7 @@ fun PortsHidingScreen(
                     items(filteredApps, key = { it.packageName }) { app ->
                         PortsAppRow(
                             app = app,
+                            userNames = userNames,
                             onToggle = {
                                 allApps =
                                     allApps.map {
@@ -363,6 +365,7 @@ private fun NotInstalledCard(modifier: Modifier = Modifier) {
 @Composable
 private fun PortsAppRow(
     app: PortsEntry,
+    userNames: Map<Int, String>,
     onToggle: () -> Unit,
 ) {
     Row(
@@ -383,7 +386,7 @@ private fun PortsAppRow(
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = labelWithUsers(app.label, app.userIds),
+                text = labelWithUsers(app.label, app.userIds, userNames),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
             )

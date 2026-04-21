@@ -85,6 +85,7 @@ fun AppHidingScreen(
     val scope = rememberCoroutineScope()
 
     val cachedApps by AppListCache.apps.collectAsState()
+    val userNames by AppListCache.userNames.collectAsState()
     val targets by TargetsCache.snapshot.collectAsState()
 
     var allApps by remember { mutableStateOf<List<HidingEntry>>(emptyList()) }
@@ -198,6 +199,7 @@ fun AppHidingScreen(
                     items(filteredApps, key = { it.packageName }) { app ->
                         HidingAppRow(
                             app = app,
+                            userNames = userNames,
                             onToggle = { role ->
                                 allApps =
                                     allApps.map {
@@ -413,6 +415,7 @@ private fun buildHidingUidResolver(
 @Composable
 private fun HidingAppRow(
     app: HidingEntry,
+    userNames: Map<Int, String>,
     onToggle: (HidingRole) -> Unit,
 ) {
     Row(
@@ -432,7 +435,7 @@ private fun HidingAppRow(
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = labelWithUsers(app.label, app.userIds),
+                text = labelWithUsers(app.label, app.userIds, userNames),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
             )
