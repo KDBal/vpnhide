@@ -75,16 +75,13 @@ internal object AppListCache {
             val loaded =
                 withContext(Dispatchers.IO) {
                     val pm = appContext.packageManager
-                    val allUserPackages = loadAllUserPackageNamesViaRoot()
-                    val allUserIdsByPackage = loadAllUserIdsByPackageViaRoot()
-                    val allUserApkPaths = loadAllUserApkPathsViaRoot()
-                    if (allUserPackages.isNotEmpty()) {
-                        allUserPackages
-                            .map { pkg ->
+                    val packages = loadPackagesViaRoot()
+                    if (packages.isNotEmpty()) {
+                        packages.entries
+                            .map { (pkg, meta) ->
                                 val info = runCatching { pm.getApplicationInfo(pkg, 0) }.getOrNull()
-                                val userIds = allUserIdsByPackage[pkg] ?: emptyList()
                                 val archiveInfo =
-                                    if (info == null) loadArchiveApplicationInfo(pm, allUserApkPaths[pkg]) else null
+                                    if (info == null) loadArchiveApplicationInfo(pm, meta.apkPath) else null
                                 val effectiveInfo = info ?: archiveInfo
 
                                 AppSummary(
@@ -92,7 +89,7 @@ internal object AppListCache {
                                     label = effectiveInfo?.loadLabel(pm)?.toString() ?: pkg,
                                     icon = effectiveInfo?.let { runCatching { pm.getApplicationIcon(it) }.getOrNull() },
                                     isSystem = effectiveInfo?.let { (it.flags and ApplicationInfo.FLAG_SYSTEM) != 0 } ?: false,
-                                    userIds = userIds,
+                                    userIds = meta.userIds,
                                 )
                             }.sortedBy { it.label.lowercase() }
                     } else {
@@ -118,65 +115,60 @@ internal object AppListCache {
         }
     }
 
-    private fun loadAllUserIdsByPackageViaRoot(): Map<String, List<Int>> {
-        val (exitCode, raw) = suExec("pm list packages -U --user all 2>/dev/null")
+    private data class PkgMeta(
+        val apkPath: String,
+        val userIds: List<Int>,
+    )
+
+    /**
+     * Enumerate every installed package across every user profile (main +
+     * work profile / MIUI Second Space / Private Space / secondary users)
+     * in one `su` call. `-U -f --user all` gives both the APK path and
+     * the UID per (pkg, user) tuple, which was previously done with three
+     * separate root roundtrips (~150ms of wasted `su` spin-up per refresh).
+     *
+     * Output format is one of:
+     *   package:<apk_path>=<pkg> uid:<uid>            (single-user)
+     *   package:<apk_path>=<pkg> uid:<uid>,<uid>,...  (AOSP --user all)
+     *   package:<apk_path>=<pkg> uid:<uid>            (repeated per user
+     *                                                  on some ROMs)
+     * So the parser merges UIDs across duplicate lines for the same pkg.
+     */
+    private fun loadPackagesViaRoot(): Map<String, PkgMeta> {
+        val (exitCode, raw) = suExec("pm list packages -U -f --user all 2>/dev/null")
         if (exitCode != 0) return emptyMap()
-        val out = LinkedHashMap<String, List<Int>>()
-        raw
-            .lineSequence()
-            .map { it.trim() }
-            .filter { it.startsWith("package:") }
-            .forEach { line ->
-                val pkg = line.substringAfter("package:").substringBefore(" uid:").trim()
-                if (pkg.isEmpty()) return@forEach
-                val uidPart = line.substringAfter("uid:", "").trim()
-                if (uidPart.isEmpty()) {
-                    out[pkg] = emptyList()
-                    return@forEach
-                }
-
-                val userIds =
-                    uidPart
-                        .split(',')
-                        .mapNotNull { it.trim().toIntOrNull() }
-                        .map { it / 100000 }
-                        .distinct()
-                        .sorted()
-                out[pkg] = userIds
-            }
-        return out
-    }
-
-    private fun loadAllUserPackageNamesViaRoot(): List<String> {
-        val (exitCode, raw) = suExec("pm list packages --user all 2>/dev/null")
-        if (exitCode != 0) return emptyList()
-        return raw
-            .lineSequence()
-            .map { it.trim() }
-            .filter { it.startsWith("package:") }
-            .map { it.removePrefix("package:").trim() }
-            .filter { it.isNotEmpty() }
-            .distinct()
-            .toList()
-    }
-
-    private fun loadAllUserApkPathsViaRoot(): Map<String, String> {
-        val (exitCode, raw) = suExec("pm list packages -f --user all 2>/dev/null")
-        if (exitCode != 0) return emptyMap()
-        val out = LinkedHashMap<String, String>()
+        val out = LinkedHashMap<String, PkgMeta>()
         raw
             .lineSequence()
             .map { it.trim() }
             .filter { it.startsWith("package:") }
             .forEach { line ->
                 val body = line.removePrefix("package:")
-                val eq = body.lastIndexOf('=')
-                if (eq <= 0 || eq >= body.lastIndex) return@forEach
-                val apkPath = body.substring(0, eq).trim()
-                val pkg = body.substring(eq + 1).trim()
-                if (apkPath.isNotEmpty() && pkg.isNotEmpty() && out[pkg] == null) {
-                    out[pkg] = apkPath
-                }
+                val uidMarker = body.lastIndexOf(" uid:")
+                if (uidMarker <= 0) return@forEach
+                val pathAndPkg = body.substring(0, uidMarker)
+                val uidPart = body.substring(uidMarker + " uid:".length).trim()
+                val eq = pathAndPkg.lastIndexOf('=')
+                if (eq <= 0 || eq >= pathAndPkg.lastIndex) return@forEach
+                val apkPath = pathAndPkg.substring(0, eq).trim()
+                val pkg = pathAndPkg.substring(eq + 1).trim()
+                if (apkPath.isEmpty() || pkg.isEmpty()) return@forEach
+
+                val userIds =
+                    uidPart
+                        .split(',')
+                        .mapNotNull { it.trim().toIntOrNull() }
+                        .map { it / 100000 }
+
+                val existing = out[pkg]
+                out[pkg] =
+                    if (existing == null) {
+                        PkgMeta(apkPath, userIds.distinct().sorted())
+                    } else {
+                        existing.copy(
+                            userIds = (existing.userIds + userIds).distinct().sorted(),
+                        )
+                    }
             }
         return out
     }
