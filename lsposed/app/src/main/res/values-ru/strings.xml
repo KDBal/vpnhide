@@ -119,7 +119,7 @@
     <!-- kmod variant / load diagnostics -->
     <string name="dashboard_issue_kmod_wrong_variant">Неправильный вариант модуля ядра: установлен %1$s, вашему ядру нужен %2$s. Удалите текущий kmod и установите %3$s из последнего релиза.</string>
     <string name="dashboard_issue_kmod_unknown_variant">Модуль ядра установлен, но не загружается, и в zip не указано, под какой GKI-вариант он собран. Переустановите %1$s из последнего релиза, чтобы убедиться, что он подходит вашему ядру.</string>
-    <string name="dashboard_issue_kmod_ambiguous_try_alternative">Модуль ядра %1$s не загрузился в эту сессию. GKI-ветку вашего ядра не удаётся определить из uname -r — установите %2$s вместо него.</string>
+    <string name="dashboard_issue_kmod_ambiguous_try_alternative">Модуль ядра %1$s не загрузился при текущей загрузке. GKI-ветку вашего ядра не удаётся определить из uname -r — установите %2$s вместо него.</string>
     <string name="dashboard_issue_kmod_load_failed">Модуль ядра не загрузился. Ошибка insmod: %1$s. Чтобы приложить полный вывод insmod к багрепорту, нажмите Диагностика → Собрать отладочный лог.</string>
     <string name="dashboard_issue_kmod_not_supported_kernel">Для вашего ядра (%1$s) нет подходящего варианта vpnhide-kmod. Удалите модуль kmod и установите вместо него %2$s.</string>
     <string name="dashboard_issue_kprobes_missing">Ваше ядро собрано без CONFIG_KRETPROBES. Модуль ядра VPN Hide не может работать на таком ядре. Удалите kmod и используйте vpnhide-zygisk.zip.</string>
