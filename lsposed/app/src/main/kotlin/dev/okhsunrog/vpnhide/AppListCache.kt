@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
+import android.os.Process
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -23,6 +24,7 @@ internal data class AppSummary(
     val label: String,
     val icon: Drawable?,
     val isSystem: Boolean,
+    val userIds: List<Int> = emptyList(),
 )
 
 /**
@@ -73,21 +75,122 @@ internal object AppListCache {
             val loaded =
                 withContext(Dispatchers.IO) {
                     val pm = appContext.packageManager
-                    pm
-                        .getInstalledApplications(0)
-                        .map { info ->
-                            AppSummary(
-                                packageName = info.packageName,
-                                label = info.loadLabel(pm).toString(),
-                                icon = runCatching { pm.getApplicationIcon(info) }.getOrNull(),
-                                isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
-                            )
-                        }.sortedBy { it.label.lowercase() }
+                    val allUserPackages = loadAllUserPackageNamesViaRoot()
+                    val allUserIdsByPackage = loadAllUserIdsByPackageViaRoot()
+                    val allUserApkPaths = loadAllUserApkPathsViaRoot()
+                    if (allUserPackages.isNotEmpty()) {
+                        allUserPackages
+                            .map { pkg ->
+                                val info = runCatching { pm.getApplicationInfo(pkg, 0) }.getOrNull()
+                                val userIds = allUserIdsByPackage[pkg] ?: emptyList()
+                                val archiveInfo =
+                                    if (info == null) loadArchiveApplicationInfo(pm, allUserApkPaths[pkg]) else null
+                                val effectiveInfo = info ?: archiveInfo
+
+                                AppSummary(
+                                    packageName = pkg,
+                                    label = effectiveInfo?.loadLabel(pm)?.toString() ?: pkg,
+                                    icon = effectiveInfo?.let { runCatching { pm.getApplicationIcon(it) }.getOrNull() },
+                                    isSystem = effectiveInfo?.let { (it.flags and ApplicationInfo.FLAG_SYSTEM) != 0 } ?: false,
+                                    userIds = userIds,
+                                )
+                            }.sortedBy { it.label.lowercase() }
+                    } else {
+                        // Fallback: current-profile only (legacy behavior)
+                        pm
+                            .getInstalledApplications(0)
+                            .map { info ->
+                                AppSummary(
+                                    packageName = info.packageName,
+                                    label = info.loadLabel(pm).toString(),
+                                    icon = runCatching { pm.getApplicationIcon(info) }.getOrNull(),
+                                    isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+                                    userIds = listOf(Process.myUid() / 100000),
+                                )
+                            }.sortedBy { it.label.lowercase() }
+                    }
                 }
+
             _apps.value = loaded
             _refreshCounter.value = _refreshCounter.value + 1
         } finally {
             _loading.value = false
         }
+    }
+
+    private fun loadAllUserIdsByPackageViaRoot(): Map<String, List<Int>> {
+        val (exitCode, raw) = suExec("pm list packages -U --user all 2>/dev/null")
+        if (exitCode != 0) return emptyMap()
+        val out = LinkedHashMap<String, List<Int>>()
+        raw
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.startsWith("package:") }
+            .forEach { line ->
+                val pkg = line.substringAfter("package:").substringBefore(" uid:").trim()
+                if (pkg.isEmpty()) return@forEach
+                val uidPart = line.substringAfter("uid:", "").trim()
+                if (uidPart.isEmpty()) {
+                    out[pkg] = emptyList()
+                    return@forEach
+                }
+
+                val userIds =
+                    uidPart
+                        .split(',')
+                        .mapNotNull { it.trim().toIntOrNull() }
+                        .map { it / 100000 }
+                        .distinct()
+                        .sorted()
+                out[pkg] = userIds
+            }
+        return out
+    }
+
+    private fun loadAllUserPackageNamesViaRoot(): List<String> {
+        val (exitCode, raw) = suExec("pm list packages --user all 2>/dev/null")
+        if (exitCode != 0) return emptyList()
+        return raw
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.startsWith("package:") }
+            .map { it.removePrefix("package:").trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .toList()
+    }
+
+    private fun loadAllUserApkPathsViaRoot(): Map<String, String> {
+        val (exitCode, raw) = suExec("pm list packages -f --user all 2>/dev/null")
+        if (exitCode != 0) return emptyMap()
+        val out = LinkedHashMap<String, String>()
+        raw
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.startsWith("package:") }
+            .forEach { line ->
+                val body = line.removePrefix("package:")
+                val eq = body.lastIndexOf('=')
+                if (eq <= 0 || eq >= body.lastIndex) return@forEach
+                val apkPath = body.substring(0, eq).trim()
+                val pkg = body.substring(eq + 1).trim()
+                if (apkPath.isNotEmpty() && pkg.isNotEmpty() && out[pkg] == null) {
+                    out[pkg] = apkPath
+                }
+            }
+        return out
+    }
+
+    @Suppress("DEPRECATION")
+    private fun loadArchiveApplicationInfo(
+        pm: PackageManager,
+        apkPath: String?,
+    ): ApplicationInfo? {
+        if (apkPath.isNullOrBlank()) return null
+        val pkgInfo = runCatching { pm.getPackageArchiveInfo(apkPath, 0) }.getOrNull() ?: return null
+        val appinfo = pkgInfo.applicationInfo ?: return null
+        appinfo.sourceDir = apkPath
+        appinfo.publicSourceDir = apkPath
+        return appinfo
     }
 }

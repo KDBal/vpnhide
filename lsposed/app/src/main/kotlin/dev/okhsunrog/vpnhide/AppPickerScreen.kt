@@ -39,11 +39,14 @@ data class AppEntry(
     val label: String,
     val icon: Drawable?,
     val isSystem: Boolean,
+    val userIds: List<Int> = emptyList(),
     val kmod: Boolean = false,
     val zygisk: Boolean = false,
     val lsposed: Boolean = false,
 ) {
     val anySelected get() = kmod || zygisk || lsposed
+    val labelWithUsers: String
+        get() = if (userIds.isEmpty()) label else "$label (${userIds.joinToString(", ")})"
 }
 
 /** Which installed modules are present (detected once at load). */
@@ -109,6 +112,7 @@ fun AppPickerScreen(
                         label = app.label,
                         icon = app.icon,
                         isSystem = app.isSystem,
+                        userIds = app.userIds,
                         kmod = app.packageName in t.kmodTargets,
                         zygisk = app.packageName in t.zygiskTargets,
                         lsposed = app.packageName in t.lsposedTargets,
@@ -432,7 +436,7 @@ private fun AppRow(
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = app.label,
+                text = app.labelWithUsers,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
             )
